@@ -1,0 +1,8 @@
+{
+  "disabledMcpjsonServers": [
+    "context7"
+  ],
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  }
+}
