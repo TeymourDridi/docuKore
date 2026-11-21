@@ -15,7 +15,9 @@ public record MailProviderProperties(Provider provider)
 
     public enum Provider
     {
+        /** Sends verification emails through the Gmail API. */
         GMAIL_API,
+        /** Sends verification emails through Resend. */
         RESEND
     }
 }

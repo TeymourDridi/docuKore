@@ -1024,7 +1024,19 @@ class CabinetProvisioningAttemptTransactionTest
     /** Deterministic boundaries around real SQL execution, never mocked PostgreSQL behavior. */
     private enum Phase
     {
-        BEFORE_LOCK, BEFORE_CLAIM_LOCKS, AFTER_CLAIM, AFTER_RECEIPT, AFTER_DDL_COMMIT, AFTER_FLYWAY,
+        /** Before the original session attempts to acquire the advisory lock. */
+        BEFORE_LOCK,
+        /** Before the independent claim transaction locks the account row. */
+        BEFORE_CLAIM_LOCKS,
+        /** After the provisioning claim commits independently of schema creation. */
+        AFTER_CLAIM,
+        /** After the creation receipt is inserted, before the schema transaction commits. */
+        AFTER_RECEIPT,
+        /** After schema creation and its receipt commit together. */
+        AFTER_DDL_COMMIT,
+        /** After committed tenant migration history is observed. */
+        AFTER_FLYWAY,
+        /** Before the finalization transaction locks the account row. */
         BEFORE_FINALIZER
     }
 
@@ -1067,9 +1079,11 @@ class CabinetProvisioningAttemptTransactionTest
         private boolean eligibilityChanged;
         /** Optional fixture changes executed at most once at a selected real boundary. */
         private final Map<Phase, BoundaryAction> actions = new EnumMap<>(Phase.class);
+        /** Boundaries already observed, ensuring each callback executes at most once. */
         private final EnumSet<Phase> reached = EnumSet.noneOf(Phase.class);
         /** Reused schemas have no DDL boundary and may already have tenant history before this invocation. */
         private final boolean schemaPresentAtStart;
+        /** Whether committed tenant migration history existed before this provisioning invocation. */
         private final boolean historyPresentAtStart;
 
         private Observation(Fixture fixture)

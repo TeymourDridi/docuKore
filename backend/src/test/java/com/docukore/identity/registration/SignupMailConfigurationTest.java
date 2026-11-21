@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SignupMailConfigurationTest
 {
+    /** Isolated context runner for deployment-specific mail configuration and property binding. */
     private final ApplicationContextRunner context = new ApplicationContextRunner()
             .withUserConfiguration(SignupConfiguration.class);
 

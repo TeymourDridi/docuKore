@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SignupMailStartupTest
 {
+    /** Isolated context runner with an eager consumer of the configured mail transport. */
     private final ApplicationContextRunner context = new ApplicationContextRunner()
             .withUserConfiguration(RequiresTransport.class, SignupConfiguration.class);
 

@@ -29,14 +29,23 @@ import static org.mockito.Mockito.when;
 
 class SignupDeploymentMailTest
 {
+    /** Mock registration persistence for deployment-specific signup scenarios. */
     private final SignupRepository repository = mock(SignupRepository.class);
+    /** Mock encoder returning the fictional registration password hash. */
     private final PasswordEncoder passwords = mock(PasswordEncoder.class);
+    /** Mock transport used to verify delivery and LOCAL network isolation. */
     private final VerificationMailTransport mail = mock(VerificationMailTransport.class);
+    /** Mock provisioner used to verify activation boundaries. */
     private final CabinetProvisioningService provisioner = mock(CabinetProvisioningService.class);
+    /** Mock transaction manager for signup operations without a database. */
     private final PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+    /** Fixed instant for registration and verification-token timestamps. */
     private final Instant now = Instant.parse("2026-01-01T00:00:00Z");
+    /** Synthetic registration identifier. */
     private final UUID id = UUID.randomUUID();
+    /** Synthetic account identifier, distinct from the registration identifier. */
     private final UUID accountId = UUID.randomUUID();
+    /** Synthetic idempotency key supplied by the signup request. */
     private final UUID key = UUID.randomUUID();
 
     @Test

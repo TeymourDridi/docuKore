@@ -25,17 +25,27 @@ import java.util.concurrent.Flow;
 /** Gmail send-only OAuth adapter. Request contents and provider responses are never logged. */
 public final class GmailApiVerificationMailTransport implements VerificationMailTransport
 {
+    /** OAuth endpoint used to exchange the refresh token for an access token. */
     private static final URI TOKEN_ENDPOINT = URI.create("https://oauth2.googleapis.com/token");
+    /** Gmail endpoint used to send verification messages for the authenticated account. */
     private static final URI SEND_ENDPOINT = URI.create("https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
+    /** Maximum number of bytes collected from a successful OAuth token response. */
     private static final int MAX_TOKEN_RESPONSE_BYTES = 16 * 1024;
+    /** Safety margin subtracted from the token lifetime before refreshing. */
     private static final long EXPIRY_MARGIN_SECONDS = 30;
+    /** Maximum accepted access token lifetime in seconds. */
     private static final long MAX_TOKEN_LIFETIME_SECONDS = 24 * 60 * 60;
+    /** JSON mapper for token responses and Gmail message payloads. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    /** Gmail OAuth, sender and request timeout configuration. */
     private final GmailProperties properties;
+    /** HTTP client for OAuth token exchange and Gmail message delivery. */
     private final HttpClient client;
+    /** Clock used to calculate and check the cached token deadline. */
     private final Clock clock;
     /** Cached bearer token and deadline are guarded by this instance's monitor. */
     private String accessToken;
+    /** Cached token refresh deadline guarded by this instance's monitor. */
     private Instant refreshAt;
 
     public GmailApiVerificationMailTransport(GmailProperties properties)
@@ -241,8 +251,11 @@ public final class GmailApiVerificationMailTransport implements VerificationMail
     /** Collect only the bounded OAuth success response; cancel immediately when the limit is exceeded. */
     private static final class TokenBodySubscriber implements HttpResponse.BodySubscriber<byte[]>
     {
+        /** Future completed with the token response bytes or a safe failure. */
         private final CompletableFuture<byte[]> completion = new CompletableFuture<>();
+        /** Buffer collecting the bounded OAuth token response body. */
         private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        /** Response subscription used to request data and cancel oversized bodies. */
         private Flow.Subscription subscription;
 
         @Override

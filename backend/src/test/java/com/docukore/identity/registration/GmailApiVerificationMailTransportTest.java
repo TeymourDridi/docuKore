@@ -46,15 +46,25 @@ import static org.mockito.Mockito.when;
 
 class GmailApiVerificationMailTransportTest
 {
+    /** Expected OAuth endpoint for token refresh requests. */
     private static final URI TOKEN_ENDPOINT = URI.create("https://oauth2.googleapis.com/token");
+    /** Expected Gmail endpoint for message delivery requests. */
     private static final URI SEND_ENDPOINT = URI.create("https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
+    /** Fictional OAuth client identifier used to configure the transport. */
     private static final String CLIENT_ID = "1234567890-fictional.apps.googleusercontent.com";
+    /** Fictional client secret containing characters that require form encoding. */
     private static final String CLIENT_SECRET = "fictional&secret+value";
+    /** Fictional refresh token containing characters that require form encoding. */
     private static final String REFRESH_TOKEN = "fictional/refresh+token=value";
+    /** Fictional authenticated sender mailbox used in MIME assertions. */
     private static final String SENDER = "sender@example.test";
+    /** Fictional initial access token returned by scripted OAuth responses. */
     private static final String ACCESS_TOKEN = "fictional-access-token";
+    /** Fictional replacement access token used in refresh and retry scenarios. */
     private static final String NEXT_TOKEN = "fictional-next-token";
+    /** JSON mapper for inspecting outgoing Gmail message payloads. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    /** Fictional verification mail shared by delivery and MIME assertions. */
     private static final VerificationMailTransport.VerificationMail MAIL = new VerificationMailTransport.VerificationMail(
             UUID.fromString("12345678-1234-1234-1234-123456789012"), "patient+tag@another.example",
             URI.create("https://app.example.test/verify?token=fictional-proof&label=caf%C3%A9"));
@@ -444,6 +454,7 @@ class GmailApiVerificationMailTransportTest
 
     private static final class MutableClock extends Clock
     {
+        /** Controllable current instant for token expiry scenarios. */
         private Instant now = Instant.parse("2026-11-20T12:00:00Z");
 
         void advance(Duration duration)
@@ -472,9 +483,13 @@ class GmailApiVerificationMailTransportTest
 
     private static final class MockHttp
     {
+        /** Mock HTTP client supplied to the transport under test. */
         private final HttpClient client = mock(HttpClient.class);
+        /** Scripted replies and failures consumed in request order. */
         private final Deque<Reply> replies = new ArrayDeque<>();
+        /** Captured outgoing requests for endpoint, header and payload assertions. */
         private final List<HttpRequest> requests = new ArrayList<>();
+        /** Mock responses retained to verify provider bodies remain unread. */
         private final List<HttpResponse<?>> responses = new ArrayList<>();
 
         MockHttp()

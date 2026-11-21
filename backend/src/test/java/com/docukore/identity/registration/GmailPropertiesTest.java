@@ -13,9 +13,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GmailPropertiesTest
 {
+    /** Fictional valid OAuth client identifier for configuration validation. */
     private static final String CLIENT_ID = "1234567890-fictional.apps.googleusercontent.com";
+    /** Fictional valid client secret for credential validation and redaction checks. */
     private static final String CLIENT_SECRET = "fictional-client-secret";
+    /** Fictional valid refresh token for credential validation and redaction checks. */
     private static final String REFRESH_TOKEN = "fictional-refresh-token";
+    /** Fictional valid authenticated sender mailbox for configuration validation. */
     private static final String SENDER = "sender@example.test";
 
     @Test
