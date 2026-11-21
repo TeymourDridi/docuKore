@@ -98,7 +98,7 @@ class SignupMailStartupTest
     @ComponentScan(basePackageClasses = SignupConfiguration.class, useDefaultFilters = false,
             includeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE,
                     classes = {SignupConfiguration.class, SignupConfiguration.LocalMailConfiguration.class,
-                            SignupConfiguration.HostedMailConfiguration.class}))
+                               SignupConfiguration.HostedMailConfiguration.class}))
     static class ScannedMailConfiguration
     {
     }

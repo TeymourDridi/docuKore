@@ -68,8 +68,8 @@ class GmailPropertiesTest
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {" ", "not-an-email", "sender@example.test\r\nBcc: other@example.test",
-            "Sender <sender@example.test>", "one@example.test,two@example.test", "a@-example.test",
-            ".sender@example.test", "sender..name@example.test"})
+                            "Sender <sender@example.test>", "one@example.test,two@example.test", "a@-example.test",
+                            ".sender@example.test", "sender..name@example.test"})
     void onlyASingleSafeMailboxCanBeTheAuthenticatedSender(String sender)
     {
         assertThat(new GmailProperties(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, sender, null).configured()).isFalse();

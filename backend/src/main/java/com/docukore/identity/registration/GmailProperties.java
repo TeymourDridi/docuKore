@@ -6,7 +6,8 @@ import java.time.Duration;
 
 /** Server-side Gmail OAuth configuration; never expose this record through an API or logs. */
 @ConfigurationProperties("docukore.mail.gmail")
-public record GmailProperties(String clientId, String clientSecret, String refreshToken, String sender, Duration timeout)
+public record GmailProperties(String clientId, String clientSecret, String refreshToken, String sender,
+        Duration timeout)
 {
     public GmailProperties
     {

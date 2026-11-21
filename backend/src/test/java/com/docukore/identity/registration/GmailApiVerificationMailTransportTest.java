@@ -65,7 +65,8 @@ class GmailApiVerificationMailTransportTest
     /** JSON mapper for inspecting outgoing Gmail message payloads. */
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /** Fictional verification mail shared by delivery and MIME assertions. */
-    private static final VerificationMailTransport.VerificationMail MAIL = new VerificationMailTransport.VerificationMail(
+    private static final VerificationMailTransport.VerificationMail MAIL =
+        new VerificationMailTransport.VerificationMail(
             UUID.fromString("12345678-1234-1234-1234-123456789012"), "patient+tag@another.example",
             URI.create("https://app.example.test/verify?token=fictional-proof&label=caf%C3%A9"));
 
@@ -157,7 +158,7 @@ class GmailApiVerificationMailTransportTest
 
     @ParameterizedTest
     @ValueSource(strings = {"patient@example.test\r\nBcc: attacker@example.test", "bad\nheader@example.test",
-            "one@example.test,two@example.test", "not-email", "a@-example.test", ".a@example.test", ""})
+                            "one@example.test,two@example.test", "not-email", "a@-example.test", ".a@example.test", ""})
     void invalidRecipientNeverReachesHttp(String recipient)
     {
         var http = new MockHttp();
@@ -280,17 +281,19 @@ class GmailApiVerificationMailTransportTest
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"not-json", "null", "[]", "{}",
-            "{\"access_token\":123,\"expires_in\":3600,\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"unsafe\\r\\nheader\",\"expires_in\":3600,\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"a token\",\"expires_in\":3600,\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"token\",\"expires_in\":0,\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"token\",\"expires_in\":-1,\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"token\",\"expires_in\":\"3600\",\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"token\",\"expires_in\":1.5,\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"token\",\"expires_in\":999999999999999999999,\"token_type\":\"Bearer\"}",
-            "{\"access_token\":\"token\",\"expires_in\":3600,\"token_type\":\"Basic\"}",
-            "{\"access_token\":\"token\",\"expires_in\":3600}"})
+    @ValueSource(strings = {
+        "not-json", "null", "[]", "{}",
+        "{\"access_token\":123,\"expires_in\":3600,\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"unsafe\\r\\nheader\",\"expires_in\":3600,\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"a token\",\"expires_in\":3600,\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"token\",\"expires_in\":0,\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"token\",\"expires_in\":-1,\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"token\",\"expires_in\":\"3600\",\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"token\",\"expires_in\":1.5,\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"token\",\"expires_in\":999999999999999999999,\"token_type\":\"Bearer\"}",
+        "{\"access_token\":\"token\",\"expires_in\":3600,\"token_type\":\"Basic\"}",
+        "{\"access_token\":\"token\",\"expires_in\":3600}"
+    })
     void malformedOrUnsafeTokenResponsesAreUnavailableAndNeverSent(String response)
     {
         var http = new MockHttp().reply(200, response);

@@ -61,7 +61,8 @@ public record CabinetProvisioningProperties(String url, String username, String 
         {
             LOG.error("Invalid provisioning configuration - url format: {}, timeout ranges valid: {}",
                 url != null && url.startsWith("jdbc:postgresql://") ? "format ok" : "invalid",
-                bounded(lockTimeout, 60) && bounded(connectTimeout, 30) && bounded(statementTimeout, 600) && bounded(networkTimeout, 900));
+                bounded(lockTimeout, 60) && bounded(connectTimeout, 30)
+                    && bounded(statementTimeout, 600) && bounded(networkTimeout, 900));
             throw new CabinetProvisioningException("PROVISIONING_CONFIGURATION");
         }
         int query = url.indexOf('?');

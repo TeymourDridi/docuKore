@@ -65,6 +65,42 @@ If circular dependencies occur, reconsider the design rather than hiding the cyc
 - Avoid unnecessary interfaces, generic abstractions and utility classes.
 - Do not expose persistence entities directly through REST APIs.
 
+### Java Indentation — Mandatory
+
+- Treat `backend/checkstyle.xml` as the source of truth; do not change or suppress checks to accommodate formatting.
+- Use spaces, not tabs, with four spaces per block level. Braces remain aligned with their declaration.
+- Wrapped method-call arguments must be indented at least four spaces beyond the call's indentation at its actual
+  nesting level. Do not use a fixed continuation column that ignores enclosing lambdas or nested blocks.
+- For annotation arrays whose first element follows `{` on the same line, align wrapped elements with that first
+  element. Do not apply an arbitrary extra four or eight spaces to the annotation's indentation.
+- If aligning an annotation array would exceed the 120-character limit, move all elements below the opening `{`
+  and use the configured four-space `arrayInitIndent`; keep the array indentation consistent instead of outdenting
+  only the longest element.
+- Preserve nearby valid formatting and avoid whole-file reformatting for a local fix.
+- After a coherent Java implementation batch, run `./mvnw checkstyle:check` from `backend`, saving output under
+  `backend/target`. Resolve new violations before declaring that batch complete; do not rerun tests solely for
+  whitespace-only changes. Report pre-existing violations separately without silently expanding scope.
+
+Annotation array alignment example:
+
+```java
+    @ValueSource(strings = {"first", "second",
+                            "third", "fourth"})
+```
+
+### Java Line Length — Mandatory
+
+- Keep Java source lines at or below **120 characters**, including indentation and trailing comments.
+- Apply this to production code, tests and Javadocs. Existing exclusions in `backend/checkstyle.xml` remain unchanged;
+  never expand exclusions, add suppressions or increase the limit to accommodate new code.
+- Wrap record components, constructor/method arguments, annotation arrays and chained expressions at readable
+  syntactic boundaries, preserving the mandatory indentation rules above.
+- Prefer wrapping arguments over splitting a string. When a string itself must be split, preserve its exact value,
+  including spaces, placeholders and escape sequences; do not introduce text blocks or change messages for formatting.
+- Check line lengths while editing so added indentation or documentation does not introduce fresh violations.
+- Use the single Checkstyle audit after a coherent Java batch described above to verify both length and indentation;
+  do not add extra builds or test runs solely for line wrapping.
+
 ## 4. Spring Conventions
 
 - Keep controllers thin.

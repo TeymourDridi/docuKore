@@ -84,13 +84,13 @@ public class SignupService
                         || !passwords.matches(request.password(), existing.passwordHash()))
                     {
                         LOG.warn("Registration key {} conflicts with existing data - integrity violation",
-                request.idempotencyKey());
+                            request.idempotencyKey());
                         throw new Conflict();
                     }
                     if (!existing.pendingHosted() && !existing.eligible(canonical.mode()))
                     {
                         LOG.warn("Registration key {} not in pending state or ineligible for mode {}",
-                request.idempotencyKey(), canonical.mode());
+                            request.idempotencyKey(), canonical.mode());
                         throw new Conflict();
                     }
                     return existing;
@@ -98,10 +98,11 @@ public class SignupService
                 if (registrations.identityExists(canonical.username(), canonical.email()))
                 {
                     LOG.warn("Signup conflict - username or email exists: username={}, email={}",
-                canonical.username(), canonical.email());
+                        canonical.username(), canonical.email());
                     throw new Conflict();
                 }
-                LOG.info("New user registration starting - username={}, cabinet={}", canonical.username(), canonical.cabinetName());
+                LOG.info("New user registration starting - username={}, cabinet={}",
+                    canonical.username(), canonical.cabinetName());
                 return registrations.insert(canonical, passwords.encode(request.password()), clock.instant());
             });
         } catch (DuplicateKeyException error)

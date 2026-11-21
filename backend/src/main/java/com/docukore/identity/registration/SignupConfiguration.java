@@ -33,7 +33,8 @@ public class SignupConfiguration
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(name = "docukore.deployment.mode", havingValue = "HOSTED", matchIfMissing = true)
     @EnableConfigurationProperties(MailProviderProperties.class)
-    @Import({HostedMailConfiguration.ResendMailConfiguration.class, HostedMailConfiguration.GmailMailConfiguration.class})
+    @Import({HostedMailConfiguration.ResendMailConfiguration.class,
+             HostedMailConfiguration.GmailMailConfiguration.class})
     static class HostedMailConfiguration
     {
         @Bean

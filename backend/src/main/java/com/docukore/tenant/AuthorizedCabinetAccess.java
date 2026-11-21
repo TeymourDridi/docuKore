@@ -55,7 +55,8 @@ public final class AuthorizedCabinetAccess
 
         if (TenantContext.isPresent() || TransactionSynchronizationManager.isActualTransactionActive())
         {
-            LOG.error("Authorize cabinet before starting tenant persistence - context present: {}, transaction active: {}",
+            LOG.error("Authorize cabinet before starting tenant persistence - context present: {},"
+                + " transaction active: {}",
                 TenantContext.isPresent(), TransactionSynchronizationManager.isActualTransactionActive());
             throw new IllegalStateException("Authorize cabinet before starting tenant persistence");
         }

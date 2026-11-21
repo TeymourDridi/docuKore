@@ -312,7 +312,8 @@ class CabinetProvisioningRegistrationLookupTest
                 } else if (sql.contains("cabinet_memberships WHERE cabinet_id") && sql.contains("status = 'ACTIVE'"))
                 {
                     when(row.getInt(1)).thenReturn(1);
-                } else if (sql.contains("cabinet_subscriptions WHERE cabinet_id") && sql.contains("subscription_status = 'TRIAL'"))
+                } else if (sql.contains("cabinet_subscriptions WHERE cabinet_id")
+                    && sql.contains("subscription_status = 'TRIAL'"))
                 {
                     when(row.getInt(1)).thenReturn(1);
                 } else if (sql.contains("pg_catalog.pg_locks") && sql.contains("EXISTS"))

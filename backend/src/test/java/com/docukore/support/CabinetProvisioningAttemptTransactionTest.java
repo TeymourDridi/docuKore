@@ -368,7 +368,8 @@ class CabinetProvisioningAttemptTransactionTest
         {
             observation.at(Phase.BEFORE_CLAIM_LOCKS, session ->
             {
-                Session lockSession = observation.sessions.stream().filter(candidate -> candidate.pid == observation.lockPid)
+                Session lockSession = observation.sessions.stream()
+                    .filter(candidate -> candidate.pid == observation.lockPid)
                     .findFirst().orElseThrow(() -> new AssertionError("Real L session was not observed"));
                 fixture.unlock(lockSession.connection);
                 fixture.setState("PROVISIONING", successor, "SUCCESSOR_ATTEMPT_EVIDENCE", "SUSPENDED");
