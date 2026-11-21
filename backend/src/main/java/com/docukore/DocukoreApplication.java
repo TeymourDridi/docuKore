@@ -15,12 +15,15 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class DocukoreApplication
 {
 
-    private static final Logger log = LoggerFactory.getLogger(DocukoreApplication.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(DocukoreApplication.class);
 
     public static void main(String[] args)
     {
-        log.info("Starting Docukore medical practice management platform");
+        LOG.info("Starting Docukore medical practice management platform");
         SpringApplication.run(DocukoreApplication.class, args);
-        log.info("Docukore application started successfully");
+        LOG.info("Docukore application started successfully");
     }
 }

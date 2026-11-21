@@ -23,7 +23,10 @@ import java.io.IOException;
 final class AccountSessionFilter extends OncePerRequestFilter
 {
 
-    private static final Logger log = LoggerFactory.getLogger(AccountSessionFilter.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(AccountSessionFilter.class);
 
     /** Repository for account lookups. */
     private final AccountRepository accounts;
@@ -50,7 +53,7 @@ final class AccountSessionFilter extends OncePerRequestFilter
                         .orElse(false))
         {
             String username = authentication.getName();
-            log.warn("Account {} login not allowed for deployment mode {}",
+            LOG.warn("Account {} login not allowed for deployment mode {}",
                 username, deployment.mode());
 
             new SecurityContextLogoutHandler().logout(request, response, authentication);

@@ -16,10 +16,13 @@ import javax.sql.DataSource;
 public class CabinetProvisioningConfiguration
 {
 
-    private static final Logger log = LoggerFactory.getLogger(CabinetProvisioningConfiguration.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(CabinetProvisioningConfiguration.class);
 
     public CabinetProvisioningConfiguration(DataSource dataSource)
     {
-        log.info("Cabinet provisioning configuration enabled");
+        LOG.info("Cabinet provisioning configuration enabled");
     }
 }

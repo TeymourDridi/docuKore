@@ -24,7 +24,10 @@ public record CabinetProvisioningProperties(String url, String username, String 
         Duration lockTimeout, Duration connectTimeout, Duration statementTimeout, Duration networkTimeout)
 {
 
-    private static final Logger log = LoggerFactory.getLogger(CabinetProvisioningProperties.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(CabinetProvisioningProperties.class);
 
     /** Only TLS options may be supplied in the URL; connection bounds cannot be overridden there. */
     private static final Set<String> URL_OPTIONS = Set.of("sslmode", "sslrootcert", "sslcert", "sslkey");
@@ -32,23 +35,23 @@ public record CabinetProvisioningProperties(String url, String username, String 
     /** Defaults do not enable provisioning or establish a connection during application startup. */
     public CabinetProvisioningProperties
     {
-        log.debug("Initializing provisioning properties - timeouts configured");
+        LOG.debug("Initializing provisioning properties - timeouts configured");
         lockTimeout = lockTimeout == null ? Duration.ofSeconds(10) : lockTimeout;
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(5) : connectTimeout;
         statementTimeout = statementTimeout == null ? Duration.ofSeconds(60) : statementTimeout;
         networkTimeout = networkTimeout == null ? Duration.ofSeconds(90) : networkTimeout;
-        log.debug("Provisioning timeouts set - lock: {}, connect: {}, statement: {}, network: {}",
+        LOG.debug("Provisioning timeouts set - lock: {}, connect: {}, statement: {}, network: {}",
             lockTimeout, connectTimeout, statementTimeout, networkTimeout);
     }
 
     /** Validates only when the capability is called; invalid settings do not disable authentication. */
     void requireEnabled()
     {
-        log.debug("Validating provisioning properties");
+        LOG.debug("Validating provisioning properties");
         if (url == null || url.isBlank() || username == null || username.isBlank()
                 || password == null || password.isBlank())
         {
-            log.warn("Provisioning disabled - missing credentials");
+            LOG.warn("Provisioning disabled - missing credentials");
             throw new CabinetProvisioningException("PROVISIONING_DISABLED");
         }
         if (!url.startsWith("jdbc:postgresql://") || url.contains("\n") || url.contains("\r")
@@ -56,7 +59,7 @@ public record CabinetProvisioningProperties(String url, String username, String 
                 || !bounded(statementTimeout, 600) || !bounded(networkTimeout, 900)
                 || networkTimeout.compareTo(statementTimeout) < 0)
         {
-            log.error("Invalid provisioning configuration - url format: {}, timeout ranges valid: {}",
+            LOG.error("Invalid provisioning configuration - url format: {}, timeout ranges valid: {}",
                 url != null && url.startsWith("jdbc:postgresql://") ? "format ok" : "invalid",
                 bounded(lockTimeout, 60) && bounded(connectTimeout, 30) && bounded(statementTimeout, 600) && bounded(networkTimeout, 900));
             throw new CabinetProvisioningException("PROVISIONING_CONFIGURATION");
@@ -69,12 +72,12 @@ public record CabinetProvisioningProperties(String url, String username, String 
                 String key = option.split("=", 2)[0].toLowerCase(Locale.ROOT);
                 if (!URL_OPTIONS.contains(key))
                 {
-                    log.error("Invalid URL option detected - option: {}", key);
+                    LOG.error("Invalid URL option detected - option: {}", key);
                     throw new CabinetProvisioningException("PROVISIONING_CONFIGURATION");
                 }
             }
         }
-        log.debug("Provisioning properties validated successfully");
+        LOG.debug("Provisioning properties validated successfully");
     }
 
     /** Returns whether the configured duration is positive and finite within the supported bound. */

@@ -7,7 +7,10 @@ import org.slf4j.LoggerFactory;
 public final class CabinetProvisioningException extends RuntimeException
 {
 
-    private static final Logger log = LoggerFactory.getLogger(CabinetProvisioningException.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(CabinetProvisioningException.class);
 
     /** Sanitized failure classification. */
     private final String code;
@@ -21,7 +24,7 @@ public final class CabinetProvisioningException extends RuntimeException
     {
         super(safeCode(code));
         this.code = safeCode(code);
-        log.debug("Provisioning exception raised - code: {}", this.code);
+        LOG.debug("Provisioning exception raised - code: {}", this.code);
     }
 
     /**

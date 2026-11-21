@@ -36,12 +36,15 @@ public final class TenantPersistenceGuard implements Integrator, LoadEventListen
     MergeEventListener, DeleteEventListener, RefreshEventListener, FlushEventListener, AutoFlushEventListener
 {
 
-    private static final Logger log = LoggerFactory.getLogger(TenantPersistenceGuard.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(TenantPersistenceGuard.class);
 
     @Override
     public void integrate(Metadata metadata, BootstrapContext bootstrapContext, SessionFactoryImplementor factory)
     {
-        log.debug("Registering TenantPersistenceGuard as Hibernate event listener");
+        LOG.debug("Registering TenantPersistenceGuard as Hibernate event listener");
         EventListenerRegistry events = factory.getServiceRegistry().getService(EventListenerRegistry.class);
         events.prependListeners(EventType.LOAD, this);
         events.prependListeners(EventType.PERSIST, this);
@@ -58,7 +61,7 @@ public final class TenantPersistenceGuard implements Integrator, LoadEventListen
         Object tenant = event.getSession().getTenantIdentifierValue();
         if (!(tenant instanceof UUID cabinetId))
         {
-            log.error("Persistence session has no valid tenant UUID - type: {}, value: {}",
+            LOG.error("Persistence session has no valid tenant UUID - type: {}, value: {}",
                 tenant != null ? tenant.getClass() : "null", tenant);
             throw new IllegalStateException("Persistence session has no valid tenant UUID");
         }
@@ -140,7 +143,7 @@ public final class TenantPersistenceGuard implements Integrator, LoadEventListen
         public Statements()
         {
             this.cabinetId = TenantContext.requireCabinetId();
-            log.debug("Statement listener created - tracking cabinet: {}", cabinetId);
+            LOG.debug("Statement listener created - tracking cabinet: {}", cabinetId);
         }
 
         @Override

@@ -14,19 +14,22 @@ import javax.sql.DataSource;
 public class TenantHibernateConfiguration
 {
 
-    private static final Logger log = LoggerFactory.getLogger(TenantHibernateConfiguration.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(TenantHibernateConfiguration.class);
 
     @Bean
     CabinetTenantIdentifierResolver tenantIdentifierResolver()
     {
-        log.debug("Creating tenant identifier resolver for Hibernate multi-tenancy");
+        LOG.debug("Creating tenant identifier resolver for Hibernate multi-tenancy");
         return new CabinetTenantIdentifierResolver();
     }
 
     @Bean
     CabinetTenantSchemaMapper tenantSchemaMapper(DataSource dataSource, PlatformProperties platform)
     {
-        log.debug("Creating tenant schema mapper - platform schema: {}",
+        LOG.debug("Creating tenant schema mapper - platform schema: {}",
             platform.schema());
         return new CabinetTenantSchemaMapper(dataSource, platform.schema());
     }
@@ -36,7 +39,7 @@ public class TenantHibernateConfiguration
             CabinetTenantIdentifierResolver resolver,
             CabinetTenantSchemaMapper mapper)
     {
-        log.debug("Creating Hibernate properties customizer with tenant overrides");
+        LOG.debug("Creating Hibernate properties customizer with tenant overrides");
         return properties ->
         {
             properties.put(MultiTenancySettings.MULTI_TENANT_IDENTIFIER_RESOLVER, resolver);
@@ -44,7 +47,7 @@ public class TenantHibernateConfiguration
             properties.put("hibernate.integrator_provider", (org.hibernate.jpa.boot.spi.IntegratorProvider)
                 () ->
                 {
-                    log.debug("Registering TenantPersistenceGuard integrator");
+                    LOG.debug("Registering TenantPersistenceGuard integrator");
                     return java.util.List.of(new TenantPersistenceGuard());
                 });
             properties.put(

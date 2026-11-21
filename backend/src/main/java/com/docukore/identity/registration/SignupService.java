@@ -25,7 +25,10 @@ import static com.docukore.identity.registration.SignupResponse.Status;
 @Service
 public class SignupService
 {
-    private static final Logger log = LoggerFactory.getLogger(SignupService.class);
+    /**
+     * Logger for this class.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(SignupService.class);
 
     /** Repository for signup registration data. */
     private final SignupRepository registrations;
@@ -64,7 +67,7 @@ public class SignupService
 
     public SignupResponse register(SignupRequest request)
     {
-        log.info("Registration attempt - cabinet: {}, deployment: {}", request.cabinetName(), deployment.mode());
+        LOG.info("Registration attempt - cabinet: {}, deployment: {}", request.cabinetName(), deployment.mode());
         SignupRepository.CanonicalSignup canonical = canonical(request);
         SignupRepository.Registration registration;
         try
@@ -75,42 +78,45 @@ public class SignupService
                 var previous = registrations.findByKey(canonical.key());
                 if (previous.isPresent())
                 {
-                    log.debug("Registration key {}``, recovering existing registration", request.idempotencyKey());
+                    LOG.debug("Registration key {}``, recovering existing registration", request.idempotencyKey());
                     var existing = registrations.lockRegistration(previous.get().id()).orElseThrow(Conflict::new);
                     if (!matches(existing, canonical)
                         || !passwords.matches(request.password(), existing.passwordHash()))
                     {
-                        log.warn("Registration key {}` conflicts with existing data - integrity violation", request.idempotencyKey());
+                        LOG.warn("Registration key {} conflicts with existing data - integrity violation",
+                request.idempotencyKey());
                         throw new Conflict();
                     }
                     if (!existing.pendingHosted() && !existing.eligible(canonical.mode()))
                     {
-                        log.warn("Registration key {}` not in pending state or ineligible for mode {}", request.idempotencyKey(), canonical.mode());
+                        LOG.warn("Registration key {} not in pending state or ineligible for mode {}",
+                request.idempotencyKey(), canonical.mode());
                         throw new Conflict();
                     }
                     return existing;
                 }
                 if (registrations.identityExists(canonical.username(), canonical.email()))
                 {
-                    log.warn("Signup conflict - username or email already exists: username={}, email={}", canonical.username(), canonical.email());
+                    LOG.warn("Signup conflict - username or email exists: username={}, email={}",
+                canonical.username(), canonical.email());
                     throw new Conflict();
                 }
-                log.info("New user registration starting - username={}, cabinet={}", canonical.username(), canonical.cabinetName());
+                LOG.info("New user registration starting - username={}, cabinet={}", canonical.username(), canonical.cabinetName());
                 return registrations.insert(canonical, passwords.encode(request.password()), clock.instant());
             });
         } catch (DuplicateKeyException error)
         {
             // Concurrent different-key identity collisions never attach to another registration.
-            log.warn("Duplicate key exception during registration: {}", error.getMessage());
+            LOG.warn("Duplicate key exception during registration: {}", error.getMessage());
             throw new Conflict();
         }
         if (registration.pendingHosted())
         {
-            log.info("Hosted signup pending email verification for cabinet {}", registration.cabinetName());
+            LOG.info("Hosted signup pending email verification for cabinet {}", registration.cabinetName());
             deliverIfAllowed(registration.id());
             return pendingResponse(registration);
         }
-        log.info("Local signup completed immediately - cabinet={}", registration.cabinetName());
+        LOG.info("Local signup completed immediately - cabinet={}", registration.cabinetName());
         return provision(registration);
     }
 
