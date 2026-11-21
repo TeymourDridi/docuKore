@@ -41,6 +41,8 @@ management:
       show-details: when-authorized
 
 logging:
+  pattern:
+    level: '%5p [requestId=%X{requestId:-none}]'
   level:
     com.docukore: INFO
     org.springframework: INFO

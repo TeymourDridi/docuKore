@@ -155,3 +155,38 @@ Some framework-managed classes, such as JPA entities, may require a protected no
 This is a persistence-framework requirement, not permission to use field injection.
 
 Any genuine exception to these conventions must be justified rather than silently introducing another coding style.
+
+## 7. Safe Diagnostic Logging
+
+- Use the `docukore-diagnostics` skill when logs can clarify a failure or incomplete workflow. Diagnosis is read-only
+  by default; it does not authorize launches, requests, edits, log capture or tests.
+- The request-correlation contract is a backend-generated UUID returned in the response `X-Request-ID` header and
+  stored under MDC `requestId`. Never adopt a client-supplied header value. This opaque value is for correlation only,
+  never identity, authorization, tenant resolution or idempotency.
+- Scope MDC changes to the owning request boundary: save the previous `requestId` value and restore it in `finally`,
+  or remove only that key if previously absent. Never clear the whole MDC or overwrite unrelated keys; do not let
+  request correlation leak between reused threads. Do not assume MDC follows asynchronous work automatically.
+- Use class-local loggers and stable, fixed event codes. Apart from `requestId` and normal timestamp/level/class
+  metadata, diagnostic fields are limited to fixed operation/outcome/phase/failure-code categories, allowlisted HTTP
+  methods, servlet dispatch types, bounded HTTP status (or fixed UNKNOWN/UNRESOLVED), elapsed duration and an allowlisted
+  deployment category. Never emit a raw method/path or arbitrary exception code; map unknown values to fixed fallbacks.
+  Do not build event codes or categories from user input, data or configuration dumps.
+- Never log names, usernames/emails, medical data, business/user/account/tenant identifiers, schema names, entities,
+  request DTOs or other request/response payloads, headers/cookies, tokens/passwords, proof links, idempotency keys,
+  raw paths/query strings, SQL/parameters, exception messages/stacks, provider details or configuration values.
+  The server-generated correlation UUID is the sole permitted diagnostic identifier; do not log the full header.
+- Map failures to fixed safe events/outcomes rather than logging exception text or passing a throwable to a logger.
+  Keep diagnostic arguments allowlisted; do not rely on generic redaction or object `toString()` to make them safe.
+- INFO is for meaningful business transitions/outcomes, DEBUG for intermediate phases, WARN/ERROR for actionable
+  failures. Avoid noisy per-method logs, duplicate failure logs, blanket DEBUG and SQL/bind-parameter logging.
+  A success event must reflect the actual completed business step; HTTP 200 alone may still represent pending work.
+- Temporary DEBUG must target only the relevant class through explicitly approved child-process arguments supported
+  by the actual entry point. Do not invent launcher argument support: current backend/test launchers expose no
+  arbitrary child-argument option. Never implicitly edit launchers, persistent environment variables, protected
+  configuration, hooks or global settings to enable diagnostics.
+- Test logging changes with fictional/synthetic data and a scoped class-local log capture: verify fixed event/level
+  and allowed fields, absence of sensitive canary values and exception text/stacks, and requestId isolation/restoration
+  on both normal and failure paths, including pre-existing and absent MDC values and preservation of unrelated keys.
+  Do not weaken business/security assertions or introduce real secrets/medical data into tests or artifacts.
+- Inspect artifacts narrowly; test-runner masking of three database values is not general secret sanitization and
+  Surefire artifacts may be sensitive. Use one verification owner and focused tests after a coherent authorized batch.

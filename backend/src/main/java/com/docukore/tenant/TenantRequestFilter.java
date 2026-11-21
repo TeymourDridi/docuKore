@@ -12,6 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.UUID;
 
+/** Opens a trusted tenant scope and clears thread-local state at every request boundary. */
 @Component
 public final class TenantRequestFilter extends OncePerRequestFilter
 {
@@ -37,47 +38,45 @@ public final class TenantRequestFilter extends OncePerRequestFilter
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException
     {
-        String path = request.getRequestURI();
-        LOG.debug("Tenant request filter entering - path: {}", path);
+        LOG.debug("TENANT_REQUEST_ENTER");
 
         try
         {
             if (TenantContext.isPresent())
             {
-                LOG.error("Stale tenant context detected - refusing request");
                 throw new IllegalStateException("Stale tenant context at request entry");
             }
 
             Object selection = request.getAttribute(TRUSTED_CABINET_ATTRIBUTE);
             if (selection == null)
             {
-                LOG.debug("No cabinet context provided - allowing request to proceed");
+                LOG.debug("TENANT_SELECTION_ABSENT");
                 chain.doFilter(request, response);
             } else if (selection instanceof UUID cabinetId)
             {
-                LOG.debug("Opening tenant context for cabinet: {}", cabinetId);
+                LOG.debug("TENANT_SCOPE_OPENING");
                 try (var ignored = tenantAccess.open(cabinetId))
                 {
                     chain.doFilter(request, response);
                 }
-                LOG.debug("Tenant context closed successfully");
+                LOG.debug("TENANT_SCOPE_CLOSED");
             } else
             {
-                LOG.error("Invalid cabinet selection type: {}, expected UUID", selection.getClass());
                 throw new IllegalArgumentException("Trusted cabinet selection must be a UUID");
             }
         } catch (IllegalArgumentException e)
         {
-            LOG.warn("Invalid tenant context - path: {}, error: {}", path, e.getMessage());
+            // This boundary also catches downstream business failures; it does not establish their origin.
+            LOG.warn("TENANT_REQUEST_EXCEPTION_PROPAGATED category=ILLEGAL_ARGUMENT");
             throw e;
         } catch (IllegalStateException e)
         {
-            LOG.error("Tenant context error - path: {}, error: {}", path, e.getMessage());
+            LOG.error("TENANT_REQUEST_EXCEPTION_PROPAGATED category=ILLEGAL_STATE");
             throw e;
         } finally
         {
             TenantContext.clear();
-            LOG.debug("Tenant request filter exiting - path: {}", path);
+            LOG.debug("TENANT_REQUEST_EXIT");
         }
     }
 }

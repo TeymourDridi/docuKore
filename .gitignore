@@ -72,6 +72,8 @@ client_secret*.json
 !/backend/.mvn/
 !/backend/.mvn/**
 !/backend/.gitignore
+!/backend/checkstyle.xml
+!/backend/checkstyle-suppressions.xml
 
 # Frontend: keep essential Angular and npm files
 /frontend/*

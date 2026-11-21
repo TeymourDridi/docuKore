@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+    <!-- Exclude generated sources -->
+    <suppress files="generated-sources/.*" checks="."/>
+    <suppress files="target/generated-sources/.*" checks="."/>
+    <suppress files="target/generated-test-sources/.*" checks="."/>
+
+    <!-- Exclude build output -->
+    <suppress files="target/.*" checks="."/>
+
+    <!-- Exclude Flyway migration files (versioned SQL) -->
+    <suppress files=".*/db/migration/.*\.java" checks="."/>
+
+    <!-- Exclude record classes from EmptyBlock checks (records have implicit empty blocks) -->
+    <suppress files=".*/record/.*\.java" checks="EmptyBlock"/>
+
+    <!-- Allow Lombok-generated code patterns if ever used -->
+    <suppress files=".*\.java" checks="MissingJavadocMethod,MissingJavadocType,JavadocVariable"/>
+</suppressions>

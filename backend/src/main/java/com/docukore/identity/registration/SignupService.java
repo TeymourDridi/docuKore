@@ -67,7 +67,9 @@ public class SignupService
 
     public SignupResponse register(SignupRequest request)
     {
-        LOG.info("Registration attempt - cabinet: {}, deployment: {}", request.cabinetName(), deployment.mode());
+        // Preserve the null-request failure previously triggered by the initial logging argument.
+        Objects.requireNonNull(request);
+        LOG.debug("event=SIGNUP_REGISTRATION_ATTEMPT deployment={}", deployment.mode());
         SignupRepository.CanonicalSignup canonical = canonical(request);
         SignupRepository.Registration registration;
         try
@@ -78,46 +80,46 @@ public class SignupService
                 var previous = registrations.findByKey(canonical.key());
                 if (previous.isPresent())
                 {
-                    LOG.debug("Registration key {}``, recovering existing registration", request.idempotencyKey());
+                    LOG.debug("event=SIGNUP_REGISTRATION_REUSE_SELECTED deployment={}", deployment.mode());
                     var existing = registrations.lockRegistration(previous.get().id()).orElseThrow(Conflict::new);
                     if (!matches(existing, canonical)
                         || !passwords.matches(request.password(), existing.passwordHash()))
                     {
-                        LOG.warn("Registration key {} conflicts with existing data - integrity violation",
-                            request.idempotencyKey());
+                        LOG.warn("event=SIGNUP_REGISTRATION_CONFLICT deployment={} outcome=DATA_MISMATCH",
+                                deployment.mode());
                         throw new Conflict();
                     }
                     if (!existing.pendingHosted() && !existing.eligible(canonical.mode()))
                     {
-                        LOG.warn("Registration key {} not in pending state or ineligible for mode {}",
-                            request.idempotencyKey(), canonical.mode());
+                        LOG.warn("event=SIGNUP_REGISTRATION_CONFLICT deployment={} outcome=INELIGIBLE",
+                                deployment.mode());
                         throw new Conflict();
                     }
                     return existing;
                 }
                 if (registrations.identityExists(canonical.username(), canonical.email()))
                 {
-                    LOG.warn("Signup conflict - username or email exists: username={}, email={}",
-                        canonical.username(), canonical.email());
+                    LOG.warn("event=SIGNUP_REGISTRATION_CONFLICT deployment={} outcome=IDENTITY_EXISTS",
+                            deployment.mode());
                     throw new Conflict();
                 }
-                LOG.info("New user registration starting - username={}, cabinet={}",
-                    canonical.username(), canonical.cabinetName());
+                LOG.debug("event=SIGNUP_REGISTRATION_INSERT deployment={}", deployment.mode());
                 return registrations.insert(canonical, passwords.encode(request.password()), clock.instant());
             });
         } catch (DuplicateKeyException error)
         {
             // Concurrent different-key identity collisions never attach to another registration.
-            LOG.warn("Duplicate key exception during registration: {}", error.getMessage());
+            LOG.warn("event=SIGNUP_REGISTRATION_CONFLICT deployment={} outcome=IDENTITY_COLLISION",
+                    deployment.mode());
             throw new Conflict();
         }
+        LOG.info("event=SIGNUP_REGISTRATION_COMMITTED deployment={}", deployment.mode());
         if (registration.pendingHosted())
         {
-            LOG.info("Hosted signup pending email verification for cabinet {}", registration.cabinetName());
+            LOG.debug("event=SIGNUP_VERIFICATION_PENDING deployment={}", deployment.mode());
             deliverIfAllowed(registration.id());
             return pendingResponse(registration);
         }
-        LOG.info("Local signup completed immediately - cabinet={}", registration.cabinetName());
         return provision(registration);
     }
 
@@ -149,6 +151,7 @@ public class SignupService
             return registrations.lockRegistration(id).orElseThrow(InvalidProof::new);
         });
         // Proof/account activation is committed before permanent allocation or external provisioning.
+        LOG.info("event=SIGNUP_ACTIVATION_COMMITTED deployment={} outcome=PROOF_ACCEPTED", deployment.mode());
         return provision(registration);
     }
 
@@ -199,6 +202,15 @@ public class SignupService
         try
         {
             var result = provisioner.provision(registration.id(), registration.accountId());
+            if ("ACTIVE".equals(result.status().name()))
+            {
+                LOG.info("event=SIGNUP_PROVISIONING_OUTCOME deployment={} outcome=ACTIVE reason=COMPLETED",
+                        deployment.mode());
+            } else
+            {
+                LOG.debug("event=SIGNUP_PROVISIONING_OUTCOME deployment={} outcome=PENDING reason=IN_PROGRESS",
+                        deployment.mode());
+            }
             return new SignupResponse(registration.id(), result.cabinetId(),
                     "ACTIVE".equals(result.status().name()) ? Status.ACTIVE : Status.PROVISIONING_PENDING);
         } catch (CabinetProvisioningException error)
@@ -206,6 +218,9 @@ public class SignupService
             // Missing configuration and bounded failures preserve the original committed workflow.
             var current = transactions.execute(status -> registrations.lockRegistration(registration.id())
                     .orElseThrow(RetryDenied::new));
+            // Provisioning owns the actionable failure; this is only the signup workflow summary.
+            LOG.debug("event=SIGNUP_PROVISIONING_OUTCOME deployment={} outcome=PENDING reason=PROVISIONING_DEFERRED",
+                    deployment.mode());
             return new SignupResponse(current.id(), current.cabinetId(), Status.PROVISIONING_PENDING);
         }
     }
@@ -235,6 +250,7 @@ public class SignupService
         });
         if (attempt == null)
         {
+            LOG.debug("event=SIGNUP_VERIFICATION_DELIVERY deployment={} outcome=SKIPPED", deployment.mode());
             return;
         }
         VerificationMailTransport.DeliveryResult result;
@@ -258,6 +274,13 @@ public class SignupService
         }
         var outcome = result;
         transactions.executeWithoutResult(status -> registrations.recordDelivery(attempt.tokenId(), outcome));
+        if (outcome == VerificationMailTransport.DeliveryResult.DELIVERED)
+        {
+            LOG.info("event=SIGNUP_VERIFICATION_DELIVERY deployment={} outcome={}", deployment.mode(), outcome);
+        } else
+        {
+            LOG.warn("event=SIGNUP_VERIFICATION_DELIVERY deployment={} outcome={}", deployment.mode(), outcome);
+        }
     }
 
     private SignupResponse pendingResponse(SignupRepository.Registration registration)

@@ -1,16 +1,8 @@
 package com.docukore.platform.provisioning;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /** Capability-local error carrying only an allowlisted, non-sensitive code. */
 public final class CabinetProvisioningException extends RuntimeException
 {
-
-    /**
-     * Logger for this class.
-     */
-    private static final Logger LOG = LoggerFactory.getLogger(CabinetProvisioningException.class);
 
     /** Sanitized failure classification. */
     private final String code;
@@ -24,7 +16,6 @@ public final class CabinetProvisioningException extends RuntimeException
     {
         super(safeCode(code));
         this.code = safeCode(code);
-        LOG.debug("Provisioning exception raised - code: {}", this.code);
     }
 
     /**

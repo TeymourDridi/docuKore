@@ -3,6 +3,8 @@ package com.docukore.platform.provisioning;
 import com.docukore.platform.PlatformProperties;
 import com.docukore.platform.cabinet.CabinetRegistrationRepository;
 import org.flywaydb.core.Flyway;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -22,6 +25,19 @@ import java.util.UUID;
 @Service
 public class CabinetProvisioningService
 {
+    /** Class-local diagnostics never include provisioning identities or exception details. */
+    private static final Logger LOG = LoggerFactory.getLogger(CabinetProvisioningService.class);
+
+    /** Exact finite diagnostic vocabulary; public and persisted error sanitization remain independent. */
+    private static final Set<String> SAFE_DIAGNOSTIC_CODES = Set.of(
+        "PROVISIONING_DISABLED", "PROVISIONING_CONFIGURATION", "REGISTRATION_NOT_FOUND",
+        "ACCOUNT_DOES_NOT_OWN_REGISTRATION", "CABINET_NOT_FOUND", "ACCOUNT_NOT_ACTIVE",
+        "ORIGINAL_REGISTRATION_NOT_FOUND", "REGISTRATION_CABINET_MISMATCH", "CABINET_OWNER_MISMATCH",
+        "CABINET_SCHEMA_MISMATCH", "CABINET_NOT_ACTIVE", "MEMBERSHIP_MISSING", "TRIAL_SUBSCRIPTION_MISSING",
+        "ACCOUNT_NOT_ELIGIBLE", "EMAIL_VERIFICATION_REQUIRED", "CABINET_NOT_ELIGIBLE",
+        "TENANT_MIGRATIONS_INCOMPLETE", "PROVISIONING_LOCK_LOST", "PROVISIONING_ATTEMPT_MISMATCH",
+        "PROVISIONING_CONNECTION_FAILED", "PROVISIONING_TIMEOUT", "PROVISIONING_DATABASE_ERROR", "PROVISIONING_FAILED");
+
     /** Repository for cabinet registration allocation operations. */
     private final CabinetRegistrationRepository registrationRepository;
 
@@ -57,32 +73,49 @@ public class CabinetProvisioningService
      */
     public ProvisioningResult provision(UUID registrationId, UUID accountId)
     {
-        // Step 1: Verify provisioning capability is enabled
-        properties.requireEnabled();
+        String phase = "CONFIGURATION";
+        LOG.debug("event=CABINET_PROVISIONING_BEGIN phase=CONFIGURATION");
+        CabinetRegistrationRepository.Allocation allocation;
+        try
+        {
+            // Step 1: Verify provisioning capability is enabled
+            properties.requireEnabled();
 
-        // Step 2: Validate account ownership against original registration before any allocation
-        validateAccountOwnsRegistration(registrationId, accountId);
+            // Step 2: Validate account ownership against original registration before any allocation
+            phase = "OWNERSHIP";
+            validateAccountOwnsRegistration(registrationId, accountId);
 
-        // Step 3: Call idempotent allocation boundary (REQUIRES_NEW transaction)
-        CabinetRegistrationRepository.Allocation allocation = registrationRepository.allocate(registrationId);
+            // Step 3: Call idempotent allocation boundary (REQUIRES_NEW transaction)
+            phase = "ALLOCATION";
+            allocation = registrationRepository.allocate(registrationId);
+        } catch (RuntimeException failure)
+        {
+            LOG.warn("event=CABINET_PROVISIONING_FAILED phase={} code={}", phase, safeDiagnosticCode(failure));
+            throw failure;
+        }
+        LOG.debug("event=CABINET_PROVISIONING_PHASE phase=ALLOCATION_RETURNED");
         UUID cabinetId = allocation.cabinetId();
         String schemaName = allocation.schemaName();
         UUID reservationId = allocation.reservationId();
 
         // One physical session owns the stable cabinet lock through validation or recovery.
         UUID attemptId = null;
+        phase = "CONNECTION";
         try (Connection provisioningConn = openProvisioningConnection())
         {
             provisioningConn.setAutoCommit(false);
 
             // Acquire per-cabinet advisory lock
+            phase = "LOCK";
             if (!acquireAdvisoryLock(provisioningConn, cabinetId))
             {
+                LOG.debug("event=CABINET_PROVISIONING_LOCK_CONTENDED outcome=IN_PROGRESS");
                 return new ProvisioningResult(cabinetId, ProvisioningStatus.IN_PROGRESS);
             }
 
             try
             {
+                phase = "STATUS_CHECK";
                 // A predecessor may have completed before this caller acquired L.
                 try (PreparedStatement statusStmt = provisioningConn.prepareStatement(
                     "SELECT provisioning_status FROM \"" + platformSchema + "\".cabinets WHERE id = ?"))
@@ -96,12 +129,16 @@ public class CabinetProvisioningService
                         }
                         if ("ACTIVE".equals(rs.getString(1)))
                         {
-                            return validateCompletedProvisioning(
+                            phase = "COMPLETED_VALIDATION";
+                            ProvisioningResult completed = validateCompletedProvisioning(
                                 provisioningConn, cabinetId, accountId, schemaName, reservationId);
+                            LOG.debug("event=CABINET_PROVISIONING_COMPLETED_REUSE outcome=ACTIVE");
+                            return completed;
                         }
                     }
                 }
 
+                phase = "CLAIM";
                 // C is unpooled and independent of both L and any ambient Spring transaction.
                 try (Connection claimConn = openProvisioningConnection())
                 {
@@ -110,27 +147,35 @@ public class CabinetProvisioningService
                         claimConn, provisioningConn, registrationId, cabinetId, accountId, schemaName);
                     // Keep the token even if commit acknowledgement or C's close fails.
                     claimConn.commit();
+                    LOG.debug("event=CABINET_PROVISIONING_PHASE phase=CLAIM_COMMITTED");
                 }
 
+                phase = "SCHEMA_RECEIPT";
                 requireAttemptOwnership(provisioningConn, cabinetId, attemptId);
                 // Create or validate the immutable schema/receipt pair in the same transaction.
                 createSchemaWithReceipt(provisioningConn, cabinetId, schemaName, reservationId);
                 requireAttemptOwnership(provisioningConn, cabinetId, attemptId);
                 provisioningConn.commit();
+                LOG.debug("event=CABINET_PROVISIONING_PHASE phase=SCHEMA_RECEIPT_COMMITTED");
 
+                phase = "MIGRATIONS";
                 // Do not retain row locks across independently connected Flyway execution.
                 requireAttemptOwnership(provisioningConn, cabinetId, attemptId);
                 provisioningConn.commit();
                 applyTenantMigrations(schemaName);
+                LOG.debug("event=CABINET_PROVISIONING_PHASE phase=MIGRATIONS_RETURNED");
+                phase = "ACTIVATION";
                 requireAttemptOwnership(provisioningConn, cabinetId, attemptId);
 
                 // Finalize cabinet while holding the original advisory-lock session.
                 finalizeProvisioning(provisioningConn, cabinetId, accountId, schemaName, reservationId, attemptId);
                 provisioningConn.commit();
+                LOG.info("event=CABINET_PROVISIONING_ACTIVATED phase=ACTIVATION_COMMITTED outcome=ACTIVE");
 
                 return new ProvisioningResult(cabinetId, ProvisioningStatus.ACTIVE);
             } catch (Exception e)
             {
+                LOG.warn("event=CABINET_PROVISIONING_FAILED phase={} code={}", phase, safeDiagnosticCode(e));
                 try
                 {
                     provisioningConn.rollback();
@@ -154,6 +199,7 @@ public class CabinetProvisioningService
             }
         } catch (SQLException connectionFailure)
         {
+            LOG.warn("event=CABINET_PROVISIONING_FAILED phase={} code=PROVISIONING_CONNECTION_FAILED", phase);
             throw new CabinetProvisioningException("PROVISIONING_CONNECTION_FAILED");
         }
     }
@@ -805,6 +851,7 @@ public class CabinetProvisioningService
                     stmt.executeUpdate();
                 }
                 failureConn.commit();
+                LOG.debug("event=CABINET_PROVISIONING_FAILURE_RECORD_COMMITTED phase=FAILURE_RECORD");
             } catch (SQLException | RuntimeException recordFailure)
             {
                 try
@@ -820,7 +867,21 @@ public class CabinetProvisioningService
         {
             // Retain the failure internally without attaching sensitive JDBC details to the public error.
             cause.addSuppressed(recordFailure);
+            LOG.warn("event=CABINET_PROVISIONING_FAILURE_RECORD_FAILED phase=FAILURE_RECORD code={}",
+                safeDiagnosticCode(recordFailure));
         }
+    }
+
+    /**
+     * Restricts diagnostics to the finite vocabulary without changing public error sanitization.
+     *
+     * @param failure the internally retained failure, never included in a log
+     * @return an allowlisted diagnostic code or the fixed fallback
+     */
+    private String safeDiagnosticCode(Exception failure)
+    {
+        String code = sanitizeErrorCode(failure);
+        return SAFE_DIAGNOSTIC_CODES.contains(code) ? code : "PROVISIONING_FAILED";
     }
 
     private String sanitizeErrorCode(Exception e)

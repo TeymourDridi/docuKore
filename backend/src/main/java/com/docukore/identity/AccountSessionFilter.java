@@ -17,7 +17,7 @@ import java.io.IOException;
  * Revalidates global account activation on each request.
  *
  * <p>Cabinet permissions are not session authorities; they are evaluated per-request
- * via {@link TenantRequestFilter}. This filter only ensures the account itself
+ * via {@link com.docukore.tenant.TenantRequestFilter}. This filter only ensures the account itself
  * remains active and allowed to log in for the current deployment mode.</p>
  */
 final class AccountSessionFilter extends OncePerRequestFilter
@@ -52,9 +52,7 @@ final class AccountSessionFilter extends OncePerRequestFilter
                         .map(a -> a.loginAllowed(deployment))
                         .orElse(false))
         {
-            String username = authentication.getName();
-            LOG.warn("Account {} login not allowed for deployment mode {}",
-                username, deployment.mode());
+            LOG.warn("AUTH_SESSION_REVOKED deployment={}", deployment.mode());
 
             new SecurityContextLogoutHandler().logout(request, response, authentication);
             AuthenticationErrors.unauthenticated(response);

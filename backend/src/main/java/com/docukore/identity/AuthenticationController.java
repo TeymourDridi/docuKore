@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+/** Public setup and authenticated account endpoints with payload-free diagnostic events. */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthenticationController
@@ -43,21 +44,24 @@ public class AuthenticationController
     @GetMapping("/setup")
     SetupStatus setupStatus()
     {
-        LOG.info("Setup status requested - available: {}, mode: {}",
-            setup.available(), deployment.mode());
-        return new SetupStatus(setup.available(), deployment.mode());
+        var status = new SetupStatus(setup.available(), deployment.mode());
+        if (status.available())
+        {
+            LOG.debug("AUTH_SETUP_AVAILABLE deployment={}", status.deploymentMode());
+        } else
+        {
+            LOG.debug("AUTH_SETUP_UNAVAILABLE deployment={}", status.deploymentMode());
+        }
+        return status;
     }
 
     @PostMapping("/setup")
     @ResponseStatus(HttpStatus.CREATED)
     void initialize(@RequestBody LocalSetupService.SetupRequest request)
     {
-        LOG.info("Local setup initialization requested for user: {}",
-            request.username() != null ? request.username() : "[redacted]");
-
+        LOG.debug("AUTH_SETUP_STARTED deployment={}", deployment.mode());
         setup.initialize(request);
-        LOG.info("Local setup completed successfully for user: {}",
-            request.username() != null ? request.username() : "[redacted]");
+        LOG.info("AUTH_SETUP_COMPLETED deployment={}", deployment.mode());
     }
 
     @GetMapping("/csrf")
@@ -71,14 +75,28 @@ public class AuthenticationController
     AccountResponse current(Authentication authentication)
     {
         var account = accounts.find(authentication.getName()).orElseThrow();
-        LOG.debug("Current user requested - username: {}", account.username());
+        LOG.debug("AUTH_CURRENT_ACCOUNT");
         return new AccountResponse(account.id(), account.username(), account.fullName(), account.email());
     }
 
+    /**
+     * Public setup availability without installation details.
+     *
+     * @param available whether initial owner creation is available
+     * @param deploymentMode the allowlisted deployment category
+     */
     record SetupStatus(boolean available, DeploymentProperties.Mode deploymentMode)
     {
     }
 
+    /**
+     * Authenticated account response, never included in diagnostic events.
+     *
+     * @param id the account identity
+     * @param username the account login name
+     * @param fullName the account display name
+     * @param email the account email address
+     */
     record AccountResponse(UUID id, String username, String fullName, String email)
     {
     }
