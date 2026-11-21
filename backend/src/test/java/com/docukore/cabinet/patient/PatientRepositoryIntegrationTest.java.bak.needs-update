@@ -1,0 +1,286 @@
+package com.docukore.cabinet.patient;
+
+import com.docukore.DocukoreApplication;
+import com.docukore.tenant.TenantContext;
+import com.docukore.tenant.TenantRequestFilter;
+import com.docukore.support.TestFixtures;
+import com.zaxxer.hikari.HikariDataSource;
+import jakarta.persistence.EntityManagerFactory;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.orm.jpa.EntityManagerFactoryUtils;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.TestConstructor;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.sql.SQLException;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@SpringBootTest(classes = DocukoreApplication.class, properties = {
+    "spring.flyway.baseline-on-migrate=false", "spring.datasource.hikari.maximum-pool-size=1",
+    "spring.datasource.hikari.minimum-idle=1", "spring.datasource.hikari.schema=public"
+})
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
+class PatientRepositoryIntegrationTest extends SharedSpringBootTest {
+
+    private static final UUID PATIENT_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static final Instant CREATED_AT = Instant.parse("2026-01-02T03:04:05.123456Z");
+    private static final Instant UPDATED_AT = Instant.parse("2026-02-03T04:05:06.654321Z");
+    private final PatientRepository patients;
+    private final EntityManagerFactory entityManagers;
+    private final HikariDataSource dataSource;
+    private final TenantRequestFilter filter;
+    private final JdbcTemplate platformJdbc;
+    private final TransactionTemplate transactions;
+    private UUID first;
+    private UUID second;
+
+    PatientRepositoryIntegrationTest(PatientRepository patients, EntityManagerFactory entityManagers,
+                                     HikariDataSource dataSource, TenantRequestFilter filter,
+                                     @Qualifier("transactionManager") PlatformTransactionManager transactionManager) {
+        this.patients = patients;
+        this.entityManagers = entityManagers;
+        this.dataSource = dataSource;
+        this.filter = filter;
+        this.platformJdbc = new JdbcTemplate(dataSource);
+        this.transactions = new TransactionTemplate(transactionManager);
+    }
+
+    @BeforeEach
+    void provisionTestSchemas() {
+        first = TestFixtures.createCabinetWithOwner(platformJdbc).cabinetId();
+        second = TestFixtures.createCabinetWithOwner(platformJdbc).cabinetId();
+    }
+
+    @Test
+    void savesAndRetrievesEveryMappedColumnInSeparateTransactions() throws Exception {
+        UUID source = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        UUID batch = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        UUID creator = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        UUID updater = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        request(first, () -> {
+            Patient patient = patient(first, "Fictional given");
+            patient.setBirthDate(1980, 3, 15, BirthPrecision.COMPLETE_DATE);
+            patient.setLegacySourceSystemId(source);
+            patient.setLegacyRecordId("fictional-legacy-42");
+            patient.setImportBatchId(batch);
+            patient.setCreatedBy(creator);
+            patient.setUpdatedBy(updater);
+            patients.save(patient);
+            return null;
+        });
+        request(first, () -> {
+            Patient loaded = patients.findById(PATIENT_ID).orElseThrow();
+            assertAll(
+                () -> assertEquals(PATIENT_ID, loaded.getId()),
+                () -> assertEquals(first, loaded.getCabinetId()),
+                () -> assertEquals("FIXTURE-001", loaded.getPatientNumber()),
+                () -> assertEquals("Fictional given", loaded.getLegalGivenName()),
+                () -> assertEquals("Fictional family", loaded.getLegalFamilyName()),
+                () -> assertEquals(1980, loaded.getBirthYear()),
+                () -> assertEquals(3, loaded.getBirthMonth()),
+                () -> assertEquals(15, loaded.getBirthDay()),
+                () -> assertEquals(BirthPrecision.COMPLETE_DATE, loaded.getBirthPrecision()),
+                () -> assertEquals(source, loaded.getLegacySourceSystemId()),
+                () -> assertEquals("fictional-legacy-42", loaded.getLegacyRecordId()),
+                () -> assertEquals(batch, loaded.getImportBatchId()),
+                () -> assertEquals(CREATED_AT, loaded.getCreatedAt()),
+                () -> assertEquals(UPDATED_AT, loaded.getUpdatedAt()),
+                () -> assertEquals(creator, loaded.getCreatedBy()),
+                () -> assertEquals(updater, loaded.getUpdatedBy()),
+                () -> assertNull(loaded.getArchivedAt())
+            );
+            return null;
+        });
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {
+        "COMPLETE_DATE, 2000, 2, 29", "YEAR_MONTH, 1980, 3, NULL",
+        "YEAR_ONLY, 1899, NULL, NULL", "UNKNOWN, NULL, NULL, NULL"
+    }, nullValues = "NULL")
+    void mapsBirthPrecisionWithoutFabricatingMissingComponents(BirthPrecision precision, Integer year,
+                                                               Integer month, Integer day) throws Exception {
+        request(first, () -> {
+            Patient patient = patient(first, "Fictional given");
+            patient.setBirthDate(year, month, day, precision);
+            patients.save(patient);
+            return null;
+        });
+        request(first, () -> {
+            Patient loaded = patients.findById(PATIENT_ID).orElseThrow();
+            assertEquals(precision, loaded.getBirthPrecision());
+            assertEquals(year, loaded.getBirthYear());
+            assertEquals(month, loaded.getBirthMonth());
+            assertEquals(day, loaded.getBirthDay());
+            var em = EntityManagerFactoryUtils.getTransactionalEntityManager(entityManagers);
+            assertNotNull(em);
+            assertEquals(precision.name(), em.createNativeQuery(
+                "SELECT birth_precision FROM patients WHERE id = :id", String.class)
+                .setParameter("id", PATIENT_ID).getSingleResult());
+            return null;
+        });
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {
+        "COMPLETE_DATE, 1900, 2, 29", "COMPLETE_DATE, 2001, 2, 29",
+        "COMPLETE_DATE, 2000, 4, 31", "COMPLETE_DATE, 2000, 13, 1",
+        "COMPLETE_DATE, 2000, 0, 1", "COMPLETE_DATE, 2000, 1, 0",
+        "COMPLETE_DATE, 2000, 1, 32", "COMPLETE_DATE, 0, 1, 1",
+        "COMPLETE_DATE, -1, 1, 1", "COMPLETE_DATE, NULL, 1, 1",
+        "COMPLETE_DATE, 2000, NULL, 1", "COMPLETE_DATE, 2000, 1, NULL",
+        "YEAR_MONTH, NULL, 1, NULL", "YEAR_MONTH, 2000, NULL, NULL",
+        "YEAR_MONTH, 2000, 0, NULL", "YEAR_MONTH, 2000, 13, NULL",
+        "YEAR_MONTH, 0, 1, NULL", "YEAR_MONTH, 2000, 1, 1",
+        "YEAR_ONLY, NULL, NULL, NULL", "YEAR_ONLY, 0, NULL, NULL",
+        "YEAR_ONLY, 2000, 1, NULL", "YEAR_ONLY, 2000, NULL, 1",
+        "UNKNOWN, 2000, NULL, NULL", "UNKNOWN, NULL, 1, NULL",
+        "UNKNOWN, NULL, NULL, 1"
+    }, nullValues = "NULL")
+    void postgresRejectsInvalidBirthCombinationsAndRollsBack(BirthPrecision precision, Integer year,
+                                                           Integer month, Integer day) throws Exception {
+        Exception failure = assertThrows(Exception.class, () -> request(first, () -> {
+            Patient patient = patient(first, "Fictional given");
+            patient.setBirthDate(year, month, day, precision);
+            patients.save(patient);
+            return null;
+        }));
+        SQLException sql = sqlCause(failure);
+        assertEquals("23514", sql.getSQLState());
+        assertTrue(sql.getMessage().contains("valid_birth_date"));
+        request(first, () -> {
+            assertTrue(patients.findById(PATIENT_ID).isEmpty());
+            return null;
+        });
+    }
+
+    @Test
+    void identicalPatientIdsRemainIsolatedWhenReusingOnePooledConnection() throws Exception {
+        int pid = request(first, () -> {
+            patients.save(patient(first, "First fictional given"));
+            return backendPid();
+        });
+        assertEquals(Integer.valueOf(pid), request(second, () -> {
+            assertTrue(patients.findById(PATIENT_ID).isEmpty());
+            patients.save(patient(second, "Second fictional given"));
+            return backendPid();
+        }));
+        request(first, () -> {
+            Patient loaded = patients.findById(PATIENT_ID).orElseThrow();
+            assertEquals(first, loaded.getCabinetId());
+            assertEquals("First fictional given", loaded.getLegalGivenName());
+            loaded.setLegalGivenName("Updated first fictional given");
+            return null;
+        });
+        request(second, () -> {
+            Patient loaded = patients.findById(PATIENT_ID).orElseThrow();
+            assertEquals(second, loaded.getCabinetId());
+            assertEquals("Second fictional given", loaded.getLegalGivenName());
+            return null;
+        });
+        request(first, () -> {
+            assertEquals("Updated first fictional given", patients.findById(PATIENT_ID).orElseThrow().getLegalGivenName());
+            return null;
+        });
+        try (var connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            assertEquals("public", connection.getSchema());
+            try (var rows = statement.executeQuery("SELECT pg_backend_pid()")) {
+                assertTrue(rows.next());
+                assertEquals(pid, rows.getInt(1));
+            }
+        }
+    }
+
+    @Test
+    void archivingRetainsPatientIdentityAndStoredRecord() throws Exception {
+        Instant archivedAt = Instant.parse("2026-03-04T05:06:07.123456Z");
+        request(first, () -> {
+            patients.save(patient(first, "Fictional given"));
+            return null;
+        });
+        request(first, () -> {
+            Patient loaded = patients.findById(PATIENT_ID).orElseThrow();
+            loaded.setArchivedAt(archivedAt);
+            loaded.setUpdatedAt(archivedAt);
+            patients.save(loaded);
+            return null;
+        });
+        request(first, () -> {
+            Patient loaded = patients.findById(PATIENT_ID).orElseThrow();
+            assertEquals(archivedAt, loaded.getArchivedAt());
+            assertEquals(archivedAt, loaded.getUpdatedAt());
+            assertEquals(CREATED_AT, loaded.getCreatedAt());
+            assertEquals("FIXTURE-001", loaded.getPatientNumber());
+            assertEquals("Fictional given", loaded.getLegalGivenName());
+            var em = EntityManagerFactoryUtils.getTransactionalEntityManager(entityManagers);
+            assertNotNull(em);
+            assertEquals(1L, em.createNativeQuery("SELECT count(*) FROM patients WHERE id = :id", Long.class)
+                .setParameter("id", PATIENT_ID).getSingleResult());
+            return null;
+        });
+    }
+
+    @Test
+    void repositoryRejectsAccessWithoutTrustedTenantContext() {
+        assertThrows(RuntimeException.class, () -> patients.findById(PATIENT_ID));
+        assertThrows(RuntimeException.class, () -> patients.save(patient(first, "Fictional given")));
+        assertFalse(TenantContext.isPresent());
+    }
+
+    private Patient patient(UUID cabinet, String givenName) {
+        return new Patient(PATIENT_ID, cabinet, "FIXTURE-001", givenName, "Fictional family", CREATED_AT, UPDATED_AT);
+    }
+
+    private <T> T request(UUID cabinet, Supplier<T> action) throws Exception {
+        var request = new MockHttpServletRequest();
+        request.setAttribute(TenantRequestFilter.TRUSTED_CABINET_ATTRIBUTE, cabinet);
+        var result = new AtomicReference<T>();
+        try {
+            filter.doFilter(request, new MockHttpServletResponse(), (req, res) ->
+                result.set(transactions.execute(status -> {
+                    var em = EntityManagerFactoryUtils.getTransactionalEntityManager(entityManagers);
+                    assertNotNull(em);
+                    assertEquals(schema(cabinet), em.createNativeQuery("SELECT current_schema()", String.class).getSingleResult());
+                    return action.get();
+                })));
+            return result.get();
+        } finally {
+            assertFalse(TenantContext.isPresent());
+        }
+    }
+
+    private int backendPid() {
+        var em = EntityManagerFactoryUtils.getTransactionalEntityManager(entityManagers);
+        assertNotNull(em);
+        return (Integer) em.createNativeQuery("SELECT pg_backend_pid()", Integer.class).getSingleResult();
+    }
+
+    private String schema(UUID cabinet) {
+        return platformJdbc.queryForObject("SELECT schema_name FROM public.cabinets WHERE id = ?", String.class, cabinet);
+    }
+
+    private static SQLException sqlCause(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql) {
+                return sql;
+            }
+        }
+        throw new AssertionError("Expected a PostgreSQL constraint rejection", failure);
+    }
+}

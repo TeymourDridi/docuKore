@@ -1,0 +1,192 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  color: #213f42;
+  background: radial-gradient(ellipse at 15% 10%, #e5f3ef, transparent 60%), #f4f8f7;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+:focus-visible {
+  outline: 3px solid #239b93;
+  outline-offset: 3px;
+}
+h1 {
+  margin: 0.7rem 0;
+  font-size: clamp(1.6rem, 3vw, 2rem);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1.15rem;
+}
+.auth-card {
+  width: min(100%, 460px);
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border: 1px solid #dce8e5;
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 15px 50px #174e4310;
+}
+app-login,
+app-setup,
+app-entry {
+  display: block;
+  width: min(100%, 460px);
+}
+.eyebrow {
+  color: #087b77;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+.intro {
+  margin: 0 0 1.5rem;
+  color: #546f71;
+}
+form {
+  display: flex;
+  flex-direction: column;
+}
+form label {
+  margin: 1rem 0 0.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+form input {
+  width: 100%;
+  border: 1px solid #b9cfcb;
+  border-radius: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  background: #fcfefd;
+  color: #213f42;
+}
+form input.ng-invalid.ng-touched {
+  border-color: #ab3737;
+}
+form small {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: #556e70;
+}
+.primary,
+.secondary {
+  border-radius: 0.6rem;
+  padding: 0.8rem 1.1rem;
+  font-weight: 650;
+}
+.primary {
+  margin-top: 1.6rem;
+  background: #087b77;
+  border: 1px solid #087b77;
+  color: #fff;
+}
+.primary:hover:not(:disabled) {
+  background: #066660;
+}
+.secondary {
+  background: #fff;
+  border: 1px solid #b8cecb;
+  color: #255154;
+  white-space: nowrap;
+}
+.error {
+  padding: 0.8rem 1rem;
+  border-radius: 0.5rem;
+  background: #fff1f0;
+  color: #8c2626;
+  border-inline-start: 3px solid #b73a3a;
+  font-size: 0.9rem;
+}
+.notice {
+  padding: 0.8rem 1rem;
+  background: #eaf6ee;
+  border-inline-start: 3px solid #338259;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+.card-footer {
+  margin: 1.4rem 0 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #5a7778;
+}
+app-workspace {
+  display: block;
+  width: min(100%, 960px);
+}
+.workspace-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.workspace-heading .intro {
+  margin: 0;
+}
+.account-panel,
+.next-panel {
+  padding: 1.6rem;
+  border: 1px solid #dce8e5;
+  border-radius: 1rem;
+  background: #fff;
+}
+.account-panel dl {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0.8rem 1.5rem;
+  margin: 0;
+}
+.account-panel dt {
+  color: #577173;
+}
+.account-panel dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 550;
+}
+.next-panel {
+  margin-top: 1rem;
+  display: flex;
+  gap: 1.2rem;
+  background: #eef6f3;
+}
+.next-panel p {
+  margin: 0;
+  color: #526f70;
+  max-width: 65ch;
+}
+.brand-symbol {
+  color: #087b77;
+  font-size: 2.5rem;
+  line-height: 1;
+}
+@media (max-width: 600px) {
+  .workspace-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .account-panel dl {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+  .account-panel dd {
+    margin-bottom: 0.8rem;
+  }
+}

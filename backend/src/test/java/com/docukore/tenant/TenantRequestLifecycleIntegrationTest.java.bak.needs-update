@@ -1,0 +1,102 @@
+package com.docukore.tenant;
+
+import com.docukore.support.PostgresMigrationTest;
+import com.docukore.support.TestFixtures;
+import jakarta.servlet.ServletException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class TenantRequestLifecycleIntegrationTest extends PostgresMigrationTest {
+
+    private TestFixtures.CabinetFixture cabinet;
+    private TenantRequestFilter filter;
+
+    @BeforeEach
+    void setUpFilter() {
+        cabinet = TestFixtures.createCabinetWithOwner(dataSource);
+        filter = new TenantRequestFilter(new CabinetTenantAccess(dataSource));
+    }
+
+    @Test
+    void successfulAndFailedRequestClearOnTheRequestThread() throws Exception {
+        var request = request(cabinet.cabinetId());
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> assertEquals(cabinet.cabinetId(), TenantContext.requireCabinetId()));
+        assertFalse(TenantContext.isPresent());
+        assertThrows(ServletException.class, () -> filter.doFilter(request(cabinet.cabinetId()), new MockHttpServletResponse(), (req, res) -> {
+            assertEquals(cabinet.cabinetId(), TenantContext.requireCabinetId());
+            throw new ServletException("Fictional request failure");
+        }));
+        assertFalse(TenantContext.isPresent());
+    }
+
+    @Test
+    void frontendHeaderCannotSelectTenantAndPlatformRequestsStayContextFree() throws Exception {
+        var request = new MockHttpServletRequest();
+        request.addHeader("X-Tenant-Schema", cabinet.schemaName());
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> assertFalse(TenantContext.isPresent()));
+        assertFalse(TenantContext.isPresent());
+    }
+
+    @Test
+    void invalidSelectionFailsBeforeChainAndLeavesNoContext() {
+        for (Object selection : new Object[]{"public", UUID.randomUUID(), new UUID(0, 0)}) {
+            assertThrows(RuntimeException.class, () -> filter.doFilter(request(selection), new MockHttpServletResponse(), (req, res) -> fail("Invalid tenant reached chain")));
+            assertFalse(TenantContext.isPresent());
+        }
+        jdbc.update("UPDATE " + platformSchema + ".cabinets SET provisioning_status = 'PENDING' WHERE id = ?", cabinet.cabinetId());
+        assertThrows(IllegalStateException.class, () -> filter.doFilter(request(cabinet.cabinetId()), new MockHttpServletResponse(), (req, res) -> fail("Inactive tenant reached chain")));
+        assertFalse(TenantContext.isPresent());
+    }
+
+    @Test
+    void reusedRequestThreadCannotCarrySuccessfulTenantIntoMissingOrFailedSelection() throws Exception {
+        try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            executor.submit(() -> {
+                try {
+                    filter.doFilter(request(cabinet.cabinetId()), new MockHttpServletResponse(), (req, res) -> assertEquals(cabinet.cabinetId(), TenantContext.requireCabinetId()));
+                    filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), (req, res) -> assertFalse(TenantContext.isPresent()));
+                    assertThrows(ServletException.class, () -> filter.doFilter(request(cabinet.cabinetId()), new MockHttpServletResponse(), (req, res) -> { throw new ServletException("Fictional failure"); }));
+                    assertFalse(TenantContext.isPresent());
+                    assertThrows(IllegalStateException.class, () -> filter.doFilter(request(UUID.randomUUID()), new MockHttpServletResponse(), (req, res) -> fail()));
+                    assertFalse(TenantContext.isPresent());
+                    filter.doFilter(request(cabinet.cabinetId()), new MockHttpServletResponse(), (req, res) -> assertEquals(cabinet.cabinetId(), TenantContext.requireCabinetId()));
+                    assertFalse(TenantContext.isPresent());
+                } catch (Exception failure) {
+                    throw new IllegalStateException(failure);
+                }
+            }).get(30, java.util.concurrent.TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void mappingDriftMissingSchemaAndStaleThreadStateFailClosed() throws Exception {
+        jdbc.update("UPDATE " + platformSchema + ".cabinets SET schema_name = 'public' WHERE id = ?", cabinet.cabinetId());
+        assertThrows(IllegalStateException.class, () -> filter.doFilter(request(cabinet.cabinetId()), new MockHttpServletResponse(), (req, res) -> fail()));
+        String correctSchema = cabinet.schemaName();
+        jdbc.update("UPDATE " + platformSchema + ".cabinets SET schema_name = ? WHERE id = ?", correctSchema, cabinet.cabinetId());
+        jdbc.execute("DROP SCHEMA " + correctSchema);
+        assertThrows(IllegalStateException.class, () -> filter.doFilter(request(cabinet.cabinetId()), new MockHttpServletResponse(), (req, res) -> fail()));
+        try (var ignored = TenantContext.open(cabinet.cabinetId(), correctSchema)) {
+            assertThrows(IllegalStateException.class, () -> filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), (req, res) -> fail()));
+        }
+        assertFalse(TenantContext.isPresent());
+    }
+
+    private UUID account() {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO " + platformSchema + ".users (id, username, username_normalized, password_hash, deployment_mode, account_status, activated_at, created_at) VALUES (?, ?, ?, 'fictional', 'local', 'ACTIVE', now(), now())", id, id.toString(), id.toString());
+        return id;
+    }
+
+    private MockHttpServletRequest request(Object selection) {
+        var request = new MockHttpServletRequest();
+        request.setAttribute(TenantRequestFilter.TRUSTED_CABINET_ATTRIBUTE, selection);
+        return request;
+    }
+}

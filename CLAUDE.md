@@ -147,3 +147,106 @@ Do not duplicate existing configuration or modify working OmniRoute settings wit
 Keep documentation synchronized with significant architectural changes.
 
 Consistency across the entire repository is more important than introducing a new pattern for an isolated piece of code.
+
+## User Workflow Preferences
+
+- Maximum development speed and efficient token usage.
+- Prefer implementation over prolonged planning.
+- At every new session, provide one concise project status report before working.
+- Use existing project reports instead of repeating investigations.
+- Never run expensive tests just to understand project status.
+- Avoid repetitive explanations and unnecessary documentation.
+- One concise completion report per major task.
+- Distinguish actual results from assumptions.
+
+## Aggressive Subagent Usage
+
+Use subagents proactively whenever available.
+
+- Parallelize independent backend, database, frontend and research work.
+- Use lightweight agents for inspections and simple tasks.
+- Use stronger agents for complex implementation and debugging.
+- Give each agent a clearly separated scope.
+- Avoid multiple agents editing the same files.
+- Main agent coordinates and integrates changes.
+- Do not let every subagent run its own builds or tests.
+- One agent should own verification.
+- Never create additional Docker containers through subagents.
+
+# User Working Preferences — Permanent
+
+## 1. Speed and efficiency
+- Prioritize implementation over lengthy planning.
+- Avoid repeated architecture investigations and redundant documentation.
+- Keep explanations, reports and tool output concise.
+- Save verbose logs to existing project artifact locations; show only relevant excerpts.
+- Avoid unnecessary waiting, polling and repeated commands.
+
+## 2. Subagents
+- Use subagents proactively and aggressively for independent tasks.
+- Parallelize backend, database, frontend and research work where useful.
+- Give each agent a clearly defined scope.
+- Avoid agents editing the same files.
+- Assign one agent to coordinate integration.
+- Avoid duplicate builds and tests from different agents.
+- Never allow subagents to create Docker containers.
+
+## 3. Docker and PostgreSQL
+- NEVER create new Docker containers.
+- NEVER start Testcontainers.
+- Reuse the existing PostgreSQL infrastructure.
+- Never delete Docker containers or volumes.
+- Development/test database contents are disposable.
+- Destructive database operations are permitted on confirmed development/test databases.
+- Never target production.
+- Do not reset the database after every test.
+- Reuse databases and schemas; reset only when genuinely necessary.
+
+## 4. Testing
+- Do not build after every code edit.
+- Do not test after every small modification.
+- Complete coherent implementation batches before testing.
+- Prefer focused tests for changed functionality.
+- Do not rerun unchanged passing tests.
+- Perform one full backend verification at an appropriate milestone.
+- Never weaken tests or remove assertions to obtain a successful build.
+- Preserve meaningful integration coverage.
+
+## 5. Git
+- We are not currently committing or pushing.
+- No repetitive git status/diff inspections.
+- No staging, commits or pushes.
+- Track modified files during implementation.
+- Report changed files once at completion.
+- Never use reset, clean, checkout or restore to discard user changes.
+
+## 6. Security during development
+- Defer exhaustive production security audits and compliance hardening.
+- Preserve existing authentication, authorization and tenant isolation.
+- Avoid implementing unnecessary future security frameworks.
+- Never expose credentials or secrets.
+
+## 7. Session opening
+At the beginning of every new Docukore session:
+- Give a concise status report.
+- Identify the current task and last completed task.
+- Identify unfinished work and blockers.
+- Include the latest actually verified test results.
+- Recommend the next action.
+- Use existing reports; do not run expensive tests just to prepare the report.
+
+## 8. Task execution
+- One approval for the main agreed task, not every small edit.
+- Implement the complete agreed scope without unnecessary interruptions.
+- Preserve working functionality.
+- Do not repeat completed work.
+- Stop for genuine architectural blockers or destructive ambiguity.
+- Deliver one concise, factual completion report per task.
+
+## 9. Workspace boundary
+- All Docukore work must remain inside the existing project directory.
+- Do not create files or directories outside the project.
+- Do not search the entire filesystem.
+- Use known file paths directly.
+- Do not modify global Claude settings or configuration.
+- The existing root CLAUDE.md is the primary permanent project instruction file.

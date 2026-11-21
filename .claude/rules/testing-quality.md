@@ -32,7 +32,6 @@ paths:
 ## 3. Database Integration Tests
 
 - Use real PostgreSQL for PostgreSQL-specific behavior.
-- Prefer Testcontainers for isolated database integration tests.
 - Do not use H2 as a substitute for PostgreSQL verification.
 - Test Flyway migrations against the intended database engine.
 - Test constraints, transactions and indexes where relevant.

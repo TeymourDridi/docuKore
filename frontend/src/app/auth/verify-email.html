@@ -1,0 +1,59 @@
+<section class="auth-card verification-card" aria-labelledby="verify-title">
+  <span class="eyebrow">Docukore</span>
+  <div
+    class="verification-state"
+    [attr.data-state]="state().kind"
+    [attr.role]="state().kind === 'invalid' || state().kind === 'unavailable' ? 'alert' : 'status'"
+    [attr.aria-live]="
+      state().kind === 'invalid' || state().kind === 'unavailable' ? 'assertive' : 'polite'
+    "
+    aria-atomic="true"
+    [attr.aria-busy]="busy()"
+  >
+    <div class="state-emblem" aria-hidden="true">
+      @switch (state().kind) {
+        @case ('verifying') {
+          <span class="spinner"></span>
+        }
+        @case ('active') {
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="m6 12 4 4 8-8" />
+          </svg>
+        }
+        @case ('pending') {
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+        }
+        @default {
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M12 7v6M12 16v.1" />
+          </svg>
+        }
+      }
+    </div>
+    <h1 id="verify-title">{{ i18n.text(title()) }}</h1>
+    <p class="intro">{{ i18n.text(message()) }}</p>
+    @if (busy()) {
+      <p class="verification-progress">{{ i18n.text('verifying') }}</p>
+    }
+  </div>
+
+  <div class="verification-actions">
+    @if (state().kind === 'active' || state().kind === 'pending') {
+      <a class="primary" routerLink="/login">{{ i18n.text('continueToLogin') }}</a>
+    } @else if (!busy()) {
+      @if (retryable()) {
+        <button class="primary" type="button" (click)="retry()" [disabled]="busy()">
+          {{ i18n.text('verificationRetry') }}
+        </button>
+      }
+      <a class="registration-link" routerLink="/register">
+        {{ i18n.text('backToRegistration') }}
+      </a>
+    }
+  </div>
+  <p class="card-footer">{{ i18n.text('secureSession') }}</p>
+</section>

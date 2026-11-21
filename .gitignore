@@ -1,0 +1,67 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Workstation configuration and secrets (keep the placeholder template trackable)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Claude Code - workstation-specific settings and backups
+.claude/settings.local.json*
+
+# MCP configuration - may contain authorization tokens
+.mcp.json
+.mcp.json.tmp
+
+# Temporary files and local backups
+*.tmp
+*.bak
+*.backup
+
+# Local database backup files (keep SQL migrations tracked)
+*.dump
+*.sql.gz
+
+# Private certificates and keys
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Google OAuth credentials
+client_secret*.json
+*service-account*.json
+
+# Documentation excluded from the initial repository
+/docs/
+
+# Local scripts intentionally excluded
+/run-backend-tests.ps1
+/run-backend.ps1
+/scripts/authorize-gmail.mjs
+/scripts/gmail-oauth.mjs
+/scripts/gmail-oauth.test.mjs
+/scripts/test-backend-launcher.ps1
+/scripts/test-env-runner.ps1
+
+# Task 7 working notes and diagnostic reports
+/TASK7-*.md
+
+# IntelliJ IDEA
+.idea/
+*.iml

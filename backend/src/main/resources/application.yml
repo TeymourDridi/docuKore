@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: docukore-backend
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/docukore}
+    username: ${DB_USERNAME:docukore}
+    password: ${DB_PASSWORD:docukore}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+
+  session:
+    timeout: 30m
+    jdbc:
+      initialize-schema: never
+      table-name: ${docukore.platform.schema:public}.spring_session
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/platform
+    schemas: ${docukore.platform.schema:public}
+    default-schema: ${docukore.platform.schema:public}
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.docukore: INFO
+    org.springframework: INFO
+    org.hibernate: WARN
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+docukore:
+  deployment:
+    mode: local
+
+server:
+  address: 127.0.0.1
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "!local"
+
+docukore:
+  mail:
+    gmail:
+      # Explicit aliases preserve the approved .env names; secrets remain external.
+      client-id: ${DOCUKORE_MAIL_GMAIL_CLIENT_ID:}
+      client-secret: ${DOCUKORE_MAIL_GMAIL_CLIENT_SECRET:}
+      refresh-token: ${DOCUKORE_MAIL_GMAIL_REFRESH_TOKEN:}

@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:18.7
+    container_name: docukore-postgres
+    environment:
+      POSTGRES_DB: docukore
+      POSTGRES_USER: docukore
+      POSTGRES_PASSWORD: docukore
+    ports:
+      - "5432:5432"
+    volumes:
+      - docukore-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docukore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - docukore-network
+
+volumes:
+  docukore-postgres-data:
+    name: docukore-postgres-data
+
+networks:
+  docukore-network:
+    name: docukore-network

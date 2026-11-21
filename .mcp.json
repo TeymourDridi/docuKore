@@ -6,6 +6,10 @@
       "headers": {
         "Authorization": "Bearer ctx7sk-58bb0c34-2e63-4599-986d-315dd6e46254"
       }
+    },
+    "idea": {
+      "url": "http://127.0.0.1:64342/stream",
+      "type": "http"
     }
   }
 }

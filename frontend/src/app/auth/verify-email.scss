@@ -1,0 +1,122 @@
+:host {
+  display: block;
+  width: min(100%, 460px);
+}
+
+.verification-card {
+  text-align: center;
+}
+
+.verification-state {
+  margin-top: 1.5rem;
+
+  .intro {
+    margin-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.state-emblem {
+  display: grid;
+  place-items: center;
+  width: 4.25rem;
+  height: 4.25rem;
+  margin: 0 auto 1.25rem;
+  border: 1px solid #cfe9e3;
+  border-radius: 50%;
+  background: #eef8f5;
+  color: #087b77;
+
+  svg {
+    width: 2.2rem;
+    height: 2.2rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+
+[data-state='active'] .state-emblem {
+  background: #eaf6ee;
+  border-color: #cde4d4;
+  color: #267346;
+}
+
+[data-state='pending'] .state-emblem {
+  background: #fff8e9;
+  border-color: #eadcba;
+  color: #806011;
+}
+
+[data-state='invalid'] .state-emblem {
+  background: #fff1f0;
+  border-color: #efd3d0;
+  color: #8c2626;
+}
+
+[data-state='unavailable'] .state-emblem {
+  background: #f2f6f7;
+  border-color: #d8e3e5;
+  color: #506c71;
+}
+
+.spinner {
+  width: 1.8rem;
+  height: 1.8rem;
+  border: 3px solid #c1e2dd;
+  border-top-color: #087b77;
+  border-radius: 50%;
+  animation: verification-spin 0.9s linear infinite;
+}
+
+.verification-progress {
+  margin: 1rem 0 0;
+  color: #087b77;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.verification-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+
+  .primary {
+    display: block;
+    text-decoration: none;
+    text-align: center;
+    white-space: normal;
+  }
+}
+
+.registration-link {
+  align-self: center;
+  margin-top: 1.25rem;
+  color: #087b77;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-underline-offset: 0.2em;
+
+  &:hover {
+    color: #066660;
+  }
+
+  .primary + & {
+    margin-top: 0;
+  }
+}
+
+@keyframes verification-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
