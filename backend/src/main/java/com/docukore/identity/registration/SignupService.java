@@ -3,6 +3,8 @@ package com.docukore.identity.registration;
 import com.docukore.identity.DeploymentProperties;
 import com.docukore.platform.provisioning.CabinetProvisioningException;
 import com.docukore.platform.provisioning.CabinetProvisioningService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,6 +25,8 @@ import static com.docukore.identity.registration.SignupResponse.Status;
 @Service
 public class SignupService
 {
+    private static final Logger log = LoggerFactory.getLogger(SignupService.class);
+
     /** Repository for signup registration data. */
     private final SignupRepository registrations;
     /** Password encoder for secure password storage. */
@@ -60,6 +64,7 @@ public class SignupService
 
     public SignupResponse register(SignupRequest request)
     {
+        log.info("Registration attempt - cabinet: {}, deployment: {}", request.cabinetName(), deployment.mode());
         SignupRepository.CanonicalSignup canonical = canonical(request);
         SignupRepository.Registration registration;
         try
@@ -70,34 +75,42 @@ public class SignupService
                 var previous = registrations.findByKey(canonical.key());
                 if (previous.isPresent())
                 {
+                    log.debug("Registration key {}``, recovering existing registration", request.idempotencyKey());
                     var existing = registrations.lockRegistration(previous.get().id()).orElseThrow(Conflict::new);
                     if (!matches(existing, canonical)
                         || !passwords.matches(request.password(), existing.passwordHash()))
                     {
+                        log.warn("Registration key {}` conflicts with existing data - integrity violation", request.idempotencyKey());
                         throw new Conflict();
                     }
                     if (!existing.pendingHosted() && !existing.eligible(canonical.mode()))
                     {
+                        log.warn("Registration key {}` not in pending state or ineligible for mode {}", request.idempotencyKey(), canonical.mode());
                         throw new Conflict();
                     }
                     return existing;
                 }
                 if (registrations.identityExists(canonical.username(), canonical.email()))
                 {
+                    log.warn("Signup conflict - username or email already exists: username={}, email={}", canonical.username(), canonical.email());
                     throw new Conflict();
                 }
+                log.info("New user registration starting - username={}, cabinet={}", canonical.username(), canonical.cabinetName());
                 return registrations.insert(canonical, passwords.encode(request.password()), clock.instant());
             });
         } catch (DuplicateKeyException error)
         {
             // Concurrent different-key identity collisions never attach to another registration.
+            log.warn("Duplicate key exception during registration: {}", error.getMessage());
             throw new Conflict();
         }
         if (registration.pendingHosted())
         {
+            log.info("Hosted signup pending email verification for cabinet {}", registration.cabinetName());
             deliverIfAllowed(registration.id());
             return pendingResponse(registration);
         }
+        log.info("Local signup completed immediately - cabinet={}", registration.cabinetName());
         return provision(registration);
     }
 

@@ -1,5 +1,7 @@
 package com.docukore.identity;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,6 +17,8 @@ import java.util.UUID;
 @RequestMapping("/api/auth")
 public class AuthenticationController
 {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthenticationController.class);
 
     /** Local setup service for initial owner creation. */
     private final LocalSetupService setup;
@@ -36,6 +40,8 @@ public class AuthenticationController
     @GetMapping("/setup")
     SetupStatus setupStatus()
     {
+        log.info("Setup status requested - available: {}, mode: {}",
+            setup.available(), deployment.mode());
         return new SetupStatus(setup.available(), deployment.mode());
     }
 
@@ -43,7 +49,12 @@ public class AuthenticationController
     @ResponseStatus(HttpStatus.CREATED)
     void initialize(@RequestBody LocalSetupService.SetupRequest request)
     {
+        log.info("Local setup initialization requested for user: {}",
+            request.username() != null ? request.username() : "[redacted]");
+
         setup.initialize(request);
+        log.info("Local setup completed successfully for user: {}",
+            request.username() != null ? request.username() : "[redacted]");
     }
 
     @GetMapping("/csrf")
@@ -57,6 +68,7 @@ public class AuthenticationController
     AccountResponse current(Authentication authentication)
     {
         var account = accounts.find(authentication.getName()).orElseThrow();
+        log.debug("Current user requested - username: {}", account.username());
         return new AccountResponse(account.id(), account.username(), account.fullName(), account.email());
     }
 

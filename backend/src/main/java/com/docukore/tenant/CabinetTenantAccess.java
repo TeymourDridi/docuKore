@@ -1,6 +1,8 @@
 package com.docukore.tenant;
 
 import com.docukore.platform.PlatformProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -11,6 +13,8 @@ import java.util.UUID;
 @Component
 public final class CabinetTenantAccess
 {
+
+    private static final Logger log = LoggerFactory.getLogger(CabinetTenantAccess.class);
 
     /** JdbcTemplate for platform schema access. */
     private final JdbcTemplate platformJdbc;
@@ -24,6 +28,7 @@ public final class CabinetTenantAccess
     {
         this.platformJdbc = new JdbcTemplate(dataSource);
         this.schemaMapper = schemaMapper;
+        String platformSchema = '\"' + new PlatformProperties(platform.schema()).schema() + '\"';
         this.availabilityQuery = """
             SELECT EXISTS (
                 SELECT 1 FROM "%s".cabinets c
@@ -38,20 +43,26 @@ public final class CabinetTenantAccess
     {
         if (cabinetId == null || cabinetId.equals(new UUID(0, 0)))
         {
+            log.error("Invalid cabinet UUID: {}", cabinetId);
             throw new IllegalArgumentException("A valid cabinet UUID is required");
         }
         if (TenantContext.isPresent() || TransactionSynchronizationManager.isActualTransactionActive())
         {
+            log.error("Cannot open tenant context - already present or transaction active");
             throw new IllegalStateException("Select tenant before starting persistence");
         }
 
         String resolvedSchema = schemaMapper.resolveSchemaName(cabinetId);
+        log.debug("Resolving tenant context for cabinet {} -> schema {}", cabinetId, resolvedSchema);
+
         Boolean available = platformJdbc.queryForObject(availabilityQuery, Boolean.class, cabinetId, resolvedSchema);
         if (!Boolean.TRUE.equals(available))
         {
+            log.warn("Cabinet {} is unavailable - schema: {}", cabinetId, resolvedSchema);
             throw new IllegalStateException("Cabinet is unavailable or its schema mapping is invalid");
         }
 
+        log.info("Tenant context opened successfully - cabinet: {}, schema: {}", cabinetId, resolvedSchema);
         return TenantContext.open(cabinetId, resolvedSchema);
     }
 }

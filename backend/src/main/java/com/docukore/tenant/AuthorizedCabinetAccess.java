@@ -2,6 +2,8 @@ package com.docukore.tenant;
 
 import com.docukore.cabinet.access.CabinetMembershipRepository;
 import com.docukore.identity.CurrentAccount;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -13,6 +15,8 @@ import java.util.function.Supplier;
 @Component
 public final class AuthorizedCabinetAccess
 {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthorizedCabinetAccess.class);
 
     /** Current account provider. */
     private final CurrentAccount currentAccount;
@@ -44,22 +48,36 @@ public final class AuthorizedCabinetAccess
      */
     public <T> T execute(UUID cabinetId, Supplier<T> operation)
     {
+        log.debug("Authorization request received - cabinetId: {}", cabinetId);
+
         if (TenantContext.isPresent() || TransactionSynchronizationManager.isActualTransactionActive())
         {
+            log.error("Authorize cabinet before starting tenant persistence - context present: {}, transaction active: {}",
+                TenantContext.isPresent(), TransactionSynchronizationManager.isActualTransactionActive());
             throw new IllegalStateException("Authorize cabinet before starting tenant persistence");
         }
         if (cabinetId == null || cabinetId.equals(new UUID(0, 0)) || operation == null)
         {
+            log.error("Invalid cabinet operation parameters - cabinetId: {}, operation: {}",
+                cabinetId, operation);
             throw new IllegalArgumentException("A valid cabinet UUID and operation are required");
         }
         UUID userId = currentAccount.requireId();
+        log.debug("Authorizing cabinet access - user: {}, cabinet: {}", userId, cabinetId);
         if (!memberships.hasActiveMembership(cabinetId, userId))
         {
+            log.warn("Access denied - user {} not a member of cabinet {}", userId, cabinetId);
             throw new AccessDeniedException("Cabinet access is denied");
         }
+
         try (var ignored = tenantAccess.open(cabinetId))
         {
+            log.debug("Executing cabinet-scoped operation - user: {}, cabinet: {}", userId, cabinetId);
             return operation.get();
+        } catch (AccessDeniedException e)
+        {
+            log.error("Operation execution failed - access denied - user: {}, cabinet: {}", userId, cabinetId);
+            throw e;
         }
     }
 }

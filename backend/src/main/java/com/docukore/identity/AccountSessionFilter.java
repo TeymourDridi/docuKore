@@ -4,6 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
@@ -20,6 +22,8 @@ import java.io.IOException;
  */
 final class AccountSessionFilter extends OncePerRequestFilter
 {
+
+    private static final Logger log = LoggerFactory.getLogger(AccountSessionFilter.class);
 
     /** Repository for account lookups. */
     private final AccountRepository accounts;
@@ -45,6 +49,10 @@ final class AccountSessionFilter extends OncePerRequestFilter
                         .map(a -> a.loginAllowed(deployment))
                         .orElse(false))
         {
+            String username = authentication.getName();
+            log.warn("Account {} login not allowed for deployment mode {}",
+                username, deployment.mode());
+
             new SecurityContextLogoutHandler().logout(request, response, authentication);
             AuthenticationErrors.unauthenticated(response);
             return;
