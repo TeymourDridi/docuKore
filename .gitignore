@@ -62,6 +62,35 @@ client_secret*.json
 # Task 7 working notes and diagnostic reports
 /TASK7-*.md
 
-# IntelliJ IDEA
-.idea/
-*.iml
+# Backend: keep only source code and essential Maven files
+/backend/*
+!/backend/src/
+!/backend/pom.xml
+!/backend/mvnw
+!/backend/mvnw.cmd
+!/backend/.mvn/
+!/backend/.mvn/**
+!/backend/.gitignore
+
+# Frontend: keep essential Angular and npm files
+/frontend/*
+!/frontend/src/
+!/frontend/src/**
+!/frontend/public/
+!/frontend/public/**
+!/frontend/angular.json
+!/frontend/package.json
+!/frontend/package-lock.json
+!/frontend/tsconfig*.json
+!/frontend/.gitignore
+
+# Frontend tooling configuration
+/frontend/vite.config.ts
+/frontend/vitest.config.ts
+/frontend/.postcssrc.json
+/frontend/postcss.config.js
+/frontend/proxy.conf.json
+/frontend/proxy.conf.js
+/frontend/eslint.config.js
+/frontend/prettier.config.js
+/frontend/.prettierrc
