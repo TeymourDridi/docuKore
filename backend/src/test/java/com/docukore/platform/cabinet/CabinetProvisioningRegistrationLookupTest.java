@@ -290,8 +290,7 @@ class CabinetProvisioningRegistrationLookupTest
                         when(row.getObject("reservation_id")).thenReturn(RESERVATION);
                         when(row.getLong("namespace_oid")).thenReturn(11L);
                         when(row.getLong("owner_oid")).thenReturn(12L);
-                    }
-                    else
+                    } else
                     {
                         when(row.next()).thenReturn(false);
                     }

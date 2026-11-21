@@ -4,7 +4,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 
-/** Server-side Gmail OAuth configuration; never expose this record through an API or logs. */
+/**
+ * Server-side Gmail OAuth configuration; never expose this record through an API or logs.
+ *
+ * @param clientId OAuth client identifier used for token refresh requests
+ * @param clientSecret OAuth client secret used for token refresh requests
+ * @param refreshToken refresh token authorizing the central sender account
+ * @param sender authenticated sender's bare email address
+ * @param timeout HTTP request timeout, defaulting to ten seconds when null
+ */
 @ConfigurationProperties("docukore.mail.gmail")
 public record GmailProperties(String clientId, String clientSecret, String refreshToken, String sender,
         Duration timeout)

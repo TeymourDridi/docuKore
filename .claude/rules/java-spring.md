@@ -101,6 +101,35 @@ Annotation array alignment example:
 - Use the single Checkstyle audit after a coherent Java batch described above to verify both length and indentation;
   do not add extra builds or test runs solely for line wrapping.
 
+### Java Type Javadoc — Mandatory
+
+- Follow `JavadocType` in `backend/checkstyle.xml` for production and test sources; never weaken or suppress checks.
+- Its default requires `@param` tags for every documented record component and generic type parameter.
+- Give each documented record component a meaningful `@param componentName` description matching its exact name;
+  keep tags synchronized when components are renamed, added or removed. Document generic parameters as `@param <T>`.
+- Place type Javadoc before annotations so it documents the declaration correctly.
+- Never include credential values in Javadoc.
+
+### Java Brace Placement — Mandatory
+
+- Follow `LeftCurly` option `nl` and the default `RightCurly` option `same` in `backend/checkstyle.xml`, in both
+  production and test sources; never weaken or suppress checks. This combination is **not pure Allman**.
+- Put opening block braces on the next line, aligned with their declaration.
+- Keep continuations on the closing brace's line: `} else`, `} else if (...)`, `} catch (...)`, `} finally`
+  and `} while (...)`. Any following opening block brace still goes on the next line.
+- Use the single Checkstyle audit already described above for these Javadoc and brace rules too; do not add
+  duplicate verification commands.
+
+```java
+if (condition)
+{
+    performAction();
+} else
+{
+    performAlternative();
+}
+```
+
 ## 4. Spring Conventions
 
 - Keep controllers thin.
