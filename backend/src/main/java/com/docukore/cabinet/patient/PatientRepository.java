@@ -12,7 +12,7 @@ import java.util.UUID;
  * <p>Provides basic persistence operations for patients within a cabinet.
  * All operations are scoped to the current tenant context.</p>
  */
-public interface PatientRepository extends Repository<Patient, UUID>, PatientListingQueries
+public interface PatientRepository extends Repository<Patient, UUID>, PatientListingQueries, PatientDetailQueries
 {
 
     /**

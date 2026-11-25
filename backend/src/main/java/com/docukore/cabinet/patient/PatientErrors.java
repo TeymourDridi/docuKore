@@ -61,6 +61,12 @@ public class PatientErrors
         return error(HttpStatus.CONFLICT, "CABINET_SELECTION_REQUIRED", "Select a cabinet before accessing patients.");
     }
 
+    @ExceptionHandler(PatientDetailService.NotFound.class)
+    ResponseEntity<ApiError> patientNotFound()
+    {
+        return error(HttpStatus.NOT_FOUND, "PATIENT_NOT_FOUND", "Patient not found.");
+    }
+
     @ExceptionHandler(PatientCreationService.PhoneConflict.class)
     ResponseEntity<ApiError> phoneConflict()
     {
