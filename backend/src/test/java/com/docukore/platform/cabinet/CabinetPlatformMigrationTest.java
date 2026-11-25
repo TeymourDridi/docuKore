@@ -63,7 +63,9 @@ public abstract class CabinetPlatformMigrationTest extends SharedPostgresTest
 
     protected Flyway platformFlyway(String schema, String target)
     {
+        com.docukore.support.OwnedTestDatabase.requireOwned(schema);
         return Flyway.configure().dataSource(SHARED_JDBC_URL, SHARED_USER, SHARED_PASSWORD)
+            .createSchemas(false)
             .schemas(schema)
             .defaultSchema(schema)
             .locations("classpath:db/migration/platform")
@@ -170,9 +172,9 @@ public abstract class CabinetPlatformMigrationTest extends SharedPostgresTest
             "SELECT * FROM " + schema + "." + historyTable + " ORDER BY installed_rank");
     }
 
-    protected void assertElevenVersions(String schema)
+    protected void assertTwelveVersions(String schema)
     {
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"),
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"),
             jdbc.queryForList(
                 "SELECT version FROM " + schema
                     + ".flyway_schema_history WHERE success AND version IS NOT NULL ORDER BY installed_rank",

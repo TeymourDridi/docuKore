@@ -1,11 +1,17 @@
 package com.docukore.tenant;
 
+import com.docukore.cabinet.access.CabinetAuthorizationService;
+import com.docukore.cabinet.access.Permission;
 import com.docukore.identity.CurrentAccount;
+import com.docukore.support.OwnedTestDatabase;
 import com.docukore.support.SharedSpringBootTest;
+import com.zaxxer.hikari.HikariDataSource;
 import com.docukore.support.TestFixtures;
 import jakarta.persistence.EntityManagerFactory;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.TestComponent;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -14,6 +20,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.EntityManagerFactoryUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -21,7 +29,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.sql.DataSource;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
@@ -40,10 +47,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Import(CabinetAccessHttpIntegrationTest.ProbeController.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
 {
 
+    /** Latest-migrated class-owned platform for real HTTP authentication and access lookups. */
+    private static final TestFixtures.OwnedPlatform PLATFORM = TestFixtures.createPlatform("http_platform");
+    /** Runtime pool retired before dropping class-owned schemas. */
+    private final HikariDataSource dataSource;
+    /** Migrator-only exact tenant namespace receipts, retained until tenant cleanup completes. */
+    private final OwnedTestDatabase.Scope resources;
     /** Fictional password shared by test accounts. */
     private static final String PASSWORD = "Fictional-task6-passphrase!";
     /** Shared probe identifier used to compare isolated tenant data. */
@@ -54,6 +68,8 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
     private final JdbcTemplate jdbc;
     /** Encoder used to create fictional account password hashes. */
     private final PasswordEncoder passwords;
+    /** Platform authorization queried independently of a tenant Hibernate session. */
+    private final CabinetAuthorizationService authorization;
     /** Test-only controller used to observe authorized business callbacks. */
     private final ProbeController probe;
     /** Account identifier for the first cabinet's owner. */
@@ -67,13 +83,23 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
     /** Second cabinet fixture used for cross-tenant access scenarios. */
     private TestFixtures.CabinetFixture second;
 
-    CabinetAccessHttpIntegrationTest(@LocalServerPort int port, DataSource dataSource,
-                                     PasswordEncoder passwords, ProbeController probe)
+    CabinetAccessHttpIntegrationTest(@LocalServerPort int port, HikariDataSource dataSource,
+                                     PasswordEncoder passwords, ProbeController probe,
+                                     CabinetAuthorizationService authorization)
     {
         this.port = port;
-        this.jdbc = new JdbcTemplate(dataSource);
+        this.dataSource = dataSource;
+        this.jdbc = PLATFORM.jdbc();
+        this.resources = OwnedTestDatabase.scope(PLATFORM.migratorDataSource());
         this.passwords = passwords;
         this.probe = probe;
+        this.authorization = authorization;
+    }
+
+    @DynamicPropertySource
+    static void isolatedPlatform(DynamicPropertyRegistry registry)
+    {
+        registerPlatform(registry, PLATFORM);
     }
 
     @BeforeEach
@@ -83,8 +109,8 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
         owner = account(hash);
         member = account(hash);
         otherOwner = account(hash);
-        first = TestFixtures.createCabinetWithOwner(jdbc);
-        second = TestFixtures.createCabinetWithOwner(jdbc);
+        first = TestFixtures.createCabinet(jdbc, PLATFORM.schema(), owner, resources);
+        second = TestFixtures.createCabinet(jdbc, PLATFORM.schema(), otherOwner, resources);
         TestFixtures.createTenantProbeTable(jdbc, first.schemaName());
         TestFixtures.createTenantProbeTable(jdbc, second.schemaName());
         String sql1 = "INSERT INTO " + first.schemaName() + ".tenant_probe (id, marker) VALUES (?, ?)";
@@ -111,7 +137,27 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
         assertEquals(200, memberResponse.statusCode());
         assertTrue(memberResponse.body().contains(member.toString()));
         assertEquals(2, probe.calls.get());
-        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM public.membership_permissions", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM "
+            + OwnedTestDatabase.identifier(PLATFORM.schema()) + ".membership_permissions", Integer.class));
+    }
+
+    @Test
+    void platformPermissionsResolveBeforeTenantContextAndRespectRevocation()
+    {
+        String schema = OwnedTestDatabase.identifier(PLATFORM.schema());
+        UUID membership = jdbc.queryForObject("SELECT id FROM " + schema
+            + ".cabinet_memberships WHERE cabinet_id = ? AND user_id = ?", UUID.class, first.cabinetId(), member);
+        String grants = schema + ".membership_permissions";
+        assertEquals(Permission.READ_WRITE, authorization.resolvePermission(first.cabinetId(), owner));
+        assertEquals(Permission.NONE, authorization.resolvePermission(first.cabinetId(), member));
+        jdbc.update("INSERT INTO " + grants
+            + " (id, membership_id, permission_code, granted_at) VALUES (?, ?, 'READ', now())",
+            UUID.randomUUID(), membership);
+        assertEquals(Permission.READ, authorization.resolvePermission(first.cabinetId(), member));
+        assertEquals(Permission.NONE, authorization.resolvePermission(second.cabinetId(), member));
+        jdbc.update("UPDATE " + grants + " SET revoked_at = now() WHERE membership_id = ?", membership);
+        assertEquals(Permission.NONE, authorization.resolvePermission(first.cabinetId(), member));
+        jdbc.update("DELETE FROM " + grants + " WHERE membership_id = ?", membership);
     }
 
     @Test
@@ -135,15 +181,15 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
     {
         Browser browser = login(member);
         assertEquals(200, browser.get(path(first.cabinetId())).statusCode());
-        String revokeSql = "UPDATE public.cabinet_memberships SET revoked_at = now() "
-                + "WHERE cabinet_id = ? AND user_id = ?";
+        String revokeSql = "UPDATE " + OwnedTestDatabase.identifier(PLATFORM.schema())
+                + ".cabinet_memberships SET revoked_at = now() WHERE cabinet_id = ? AND user_id = ?";
         jdbc.update(revokeSql, first.cabinetId(), member);
         assertEquals(403, browser.get(path(first.cabinetId())).statusCode());
-        String unrevokeSql = "UPDATE public.cabinet_memberships SET revoked_at = NULL "
-                + "WHERE cabinet_id = ? AND user_id = ?";
+        String unrevokeSql = "UPDATE " + OwnedTestDatabase.identifier(PLATFORM.schema())
+                + ".cabinet_memberships SET revoked_at = NULL WHERE cabinet_id = ? AND user_id = ?";
         jdbc.update(unrevokeSql, first.cabinetId(), member);
-        String failSql = "UPDATE public.cabinets SET provisioning_status = 'PROVISIONING_FAILED' "
-                + "WHERE id = ?";
+        String failSql = "UPDATE " + OwnedTestDatabase.identifier(PLATFORM.schema())
+                + ".cabinets SET provisioning_status = 'PROVISIONING_FAILED' WHERE id = ?";
         jdbc.update(failSql, first.cabinetId());
         assertEquals(403, browser.get(path(first.cabinetId())).statusCode());
         assertEquals(1, probe.calls.get());
@@ -167,9 +213,19 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
     void suspendedAccountSessionCannotReachGatewayBusinessOperations() throws Exception
     {
         Browser browser = login(owner);
-        jdbc.update("UPDATE public.users SET account_status = 'SUSPENDED' WHERE id = ?", owner);
+        jdbc.update("UPDATE " + OwnedTestDatabase.identifier(PLATFORM.schema())
+            + ".users SET account_status = 'SUSPENDED' WHERE id = ?", owner);
         assertEquals(401, browser.get(path(first.cabinetId())).statusCode());
         assertEquals(0, probe.calls.get());
+    }
+
+    @AfterAll
+    void removeOnlyOwnedFixtures()
+    {
+        // Retire the HTTP application's runtime pool before dropping tenants and their platform receipts.
+        dataSource.close();
+        resources.close();
+        PLATFORM.close();
     }
 
     private Browser login(UUID account) throws Exception
@@ -184,17 +240,17 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
     {
         UUID id = UUID.randomUUID();
         jdbc.update("""
-            INSERT INTO public.users (id, username, username_normalized, password_hash, deployment_mode,
+            INSERT INTO %s.users (id, username, username_normalized, password_hash, deployment_mode,
                 account_status, activated_at, created_at)
             VALUES (?, ?, ?, ?, 'local', 'ACTIVE', now(), now())
-            """, id, id.toString(), id.toString(), hash);
+            """.formatted(OwnedTestDatabase.identifier(PLATFORM.schema())), id, id.toString(), id.toString(), hash);
         return id;
     }
 
     private void membership(UUID cabinet, UUID account, String role)
     {
-        String sql = "INSERT INTO public.cabinet_memberships "
-                + "(id, cabinet_id, user_id, membership_role, staff_type, status) "
+        String sql = "INSERT INTO " + OwnedTestDatabase.identifier(PLATFORM.schema())
+                + ".cabinet_memberships (id, cabinet_id, user_id, membership_role, staff_type, status) "
                 + "VALUES (?, ?, ?, ?, 'SECRETARY', 'ACTIVE')";
         jdbc.update(sql, UUID.randomUUID(), cabinet, account, role);
     }
@@ -206,7 +262,8 @@ class CabinetAccessHttpIntegrationTest extends SharedSpringBootTest
 
     private String schema(UUID cabinet)
     {
-        return jdbc.queryForObject("SELECT schema_name FROM public.cabinets WHERE id = ?", String.class, cabinet);
+        return jdbc.queryForObject("SELECT schema_name FROM " + OwnedTestDatabase.identifier(PLATFORM.schema())
+            + ".cabinets WHERE id = ?", String.class, cabinet);
     }
 
     // Excluded from normal component scanning; imported only by this test.

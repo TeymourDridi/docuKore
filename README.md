@@ -60,38 +60,38 @@ docukore/
 
 ## Getting Started
 
-### 1. Start PostgreSQL
+### 1. Reuse existing PostgreSQL
 
-```bash
-cd infrastructure/docker
-docker-compose up -d
-```
+Development and tests reuse the existing PostgreSQL **18.7** container `docukore-postgres`, named volume `docukore-postgres-data`, and mount `/var/lib/postgresql`. Never recreate/delete the container or volume, start Testcontainers, or run `docker compose up/down` for this workflow. If PostgreSQL is unavailable, report the blocker.
 
-Verify PostgreSQL is healthy:
-```bash
-docker-compose ps
-```
+Use one ignored root `.env`; `.env.example` lists the supported keys. Preserve existing passwords. Normal Java startup loads the file, verifies/creates missing application roles and `docukore`, then starts Spring and existing Flyway migrations. It never resets existing data or initializes `docukore_test`. Bootstrap uses the existing administrator on maintenance database `postgres`, never the application datasource.
 
 ### 2. Run Backend
 
-From the project root on Windows (PowerShell 5.1 or 7):
+From the project root:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run-backend.ps1
+.\run-backend.ps1 -Profile local
+.\run-backend.ps1 -Profile hosted
 ```
 
-The project-local launcher defaults to the `local` profile and does not read mail/OAuth configuration in that mode. Use `-Profile hosted` to load the approved mail settings and trusted signup app base from root `.env` into the Maven/backend child only. Paths resolve relative to the launcher; the caller's directory and Process/User/Machine environment stay unchanged. `-ExecutionPolicy Bypass` applies only to this invocation. See [Hosted verification email](#hosted-verification-email) for Gmail authorization, provider selection and limitations.
+No `-Bootstrap` is required. Direct Maven from `backend` discovers the root file automatically:
 
-Direct Maven/IntelliJ launch remains available, but **does not load `.env`**. For offline IntelliJ development, set the Spring active profile to `local`; for HOSTED with root `.env`, use `run-backend.ps1 -Profile hosted`. An unconfigured HOSTED launch fails with an explicit provider-configuration error, not a missing transport bean.
-
-```bash
-cd backend
-./mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
+```powershell
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-The backend will start on `http://localhost:8080`
+Shared IntelliJ configurations **Docukore Local** and **Docukore Hosted** in `.run/` select the profile and file, not credentials. They use the same application main. LOCAL binds to loopback by default. Health: `http://localhost:8080/actuator/health`.
 
-Health check: `http://localhost:8080/actuator/health`
+HOSTED configuration uses optional nonblank `DOCUKORE_HOSTED_<base key>` overrides in the same file. Host-side HOSTED launches use host-reachable URLs. The backend container selects `--docukore.env.context=compose` and four URL-only `DOCUKORE_COMPOSE_<base key>` settings using service hostname `postgres`, while inheriting the same credentials. For an actual hosted deployment (not this project's no-new-containers verification workflow):
+
+```powershell
+docker compose --env-file .env -f infrastructure/docker/docker-compose.yml up -d --build
+```
+
+Compose mounts the same `.env` read-only in both services. The PostgreSQL entrypoint adapter reads bootstrap credentials literally (including quotes, `$`, `#` and backslashes), applies nonblank HOSTED overrides, and delegates to the official image entrypoint with maintenance database `postgres`. Only a fresh volume receives that initial administrator; existing volume `docukore-postgres-data` remains authoritative and passwords are never rotated. Backend waits for PostgreSQL health before its Java initialization. Do not render configuration containing secrets.
+
+Installed Windows configuration: `%ProgramData%\Docukore\.env`. A future launcher may set `DOCUKORE_ENV_FILE` or `-Ddocukore.env.file=<absolute-path>`; binaries and working directory need not be in the project. No EXE/installer/VM is built here. See [environment configuration](docs/environment-configuration.md).
 
 ### 3. Run Frontend
 
@@ -150,29 +150,20 @@ npm test -- --watch=false
 
 ## Portable local test and executable configuration
 
-Copy `.env.example` to the project-root `.env` and privately supply this workstation's **existing** test credentials. `.env` and its local variants are ignored by Git; the example contains placeholders only. Reuse the dedicated `docukore_test` infrastructure, never an application or production database.
-
-The root runner supports Windows PowerShell 5.1 and PowerShell 7. It resolves paths relative to itself, regardless of the caller's directory. Unix wrapper handling is included but has not been verified on another workstation.
+Test settings live in the same root `.env`. Ordinary startup never creates or resets the dedicated test database. When genuinely absent, initialize it explicitly through the packaged Java main (or the Maven equivalent), without Spring/Flyway startup:
 
 ```powershell
-# Check configuration without connecting or running Maven
+# From backend; explicitly requested test maintenance only
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local "-Dspring-boot.run.arguments=--docukore.initialize-test"
+# From root
 .\run-backend-tests.ps1 -ValidateOnly
-
-# Default: the two focused support classes, including their PostgreSQL cases, plus quality verification
-.\run-backend-tests.ps1
-
-# Select another focused class or method explicitly
+.\run-backend-tests.ps1 -Tests '*' -Goal verify
 .\run-backend-tests.ps1 -Tests '<fully-qualified-class>#<method>' -Goal test
-
-# Dependency-free parser/isolation smoke tests (no database)
 .\scripts\test-env-runner.ps1
+.\scripts\test-backend-launcher.ps1
 ```
 
-The default selectors are `com.docukore.support.TestSchemaAllocatorConnectionTest` and `com.docukore.support.OwnedTestDatabaseProvenanceTest`; `-Goal` accepts `test` or `verify`. Avoid the provenance test's ambiguous short class name. Do not select the full suite for incremental micro-tasks.
-
-The runner reads literal `KEY=VALUE` assignments, optional surrounding single/double quotes and whole-line `#` comments. There is **no interpolation, shell execution, escape expansion or inline-comment parsing**. Required keys are `DOCUKORE_TEST_JDBC_URL`, `DOCUKORE_TEST_USERNAME` and `DOCUKORE_TEST_PASSWORD`. Missing/blank/placeholder values and invalid targets fail before Maven starts; there is no fallback to application settings or Windows User variables. Conflicting `docukore.test.*` overrides in inherited JVM/Maven options are rejected.
-
-Only these three `.env` values are injected into the Maven child's environment. The caller's Process environment and working directory remain unchanged, so no restoration is needed. The runner never persists User/Machine values. The three setup-created User test variables were removed only after successful `.env` verification; already-running terminals can retain an inherited snapshot until restarted, but the runner does not rely on it. Maven output is captured and the configured values redacted before writing `backend/target/env-focused-tests.log`; only counts/build status are printed. Avoid Maven debug/environment dumps and treat other generated artifacts as local. The unchanged Java helper also requires the literal database URL path `/docukore_test` and verifies `SELECT current_database()` before pool/schema work. Direct Maven execution does not load `.env`; absent settings safely skip gated support cases, while complete but invalid settings fail.
+The test launcher sends only the five `DOCUKORE_TEST_*` aliases to Maven; administrator/mail/application credentials are excluded. Missing/blank/placeholder keys, malformed syntax, duplicate keys and non-test targets fail before the child starts. The runner uses `docukore_test_runner`; runtime uses `docukore_app`. No Testcontainers or new containers. Defaults select the full suite; use focused selectors for incremental changes. Output is redacted and saved under `backend/target/`. `-Bootstrap` is deprecated; it performs no test database initialization.
 
 ### Hosted verification email
 
@@ -195,11 +186,11 @@ The one-time loopback callback is exactly `http://127.0.0.1:8765/oauth2/callback
 
 Spring's direct environment binding removes hyphens: use **APIKEY**, not `API_KEY` ([Spring Boot external configuration](https://docs.spring.io/spring-boot/reference/features/external-config.html)). The sender is passed as Resend's `from` address. Both values must be configured for transport use; the current application defines no `RESEND_API_KEY` or `RESEND_FROM` aliases. Store the workstation's Resend key privately in the ignored root `.env` under `DOCUKORE_MAIL_RESEND_APIKEY`; never copy it into documentation, templates, logs or source. Configure `DOCUKORE_MAIL_RESEND_SENDER` separately with a verified sender before enabling mail. `.env` is plaintext local configuration: limit access and use a managed secret store for deployed environments. `.env.example` has placeholders only.
 
-In HOSTED mode, `run-backend.ps1` allowlists the provider, four Gmail credentials/sender settings, optional exact Gmail redirect URI, the two Resend settings and `DOCUKORE_SIGNUP_APPBASEURI`. It uses the literal assignment/quote/comment syntax above, with no interpolation or shell execution. Malformed assignments, duplicate selected keys, unclosed quotes, placeholders and control characters fail without printing values. Missing keys retain inherited child values; explicit blanks override them. LOCAL skips the file completely. The child deployment mode is pinned to the selected launch profile. Datasource/provisioning configuration is unchanged: no `DOCUKORE_TEST_*`, database credentials or arbitrary keys are imported. The launcher writes no files, persistent environment or secrets in arguments. The separate manually invoked Gmail authorization command is the only new writer of the refresh token. Avoid Maven debug/environment dumps; restart after private configuration changes. Direct Maven/IDE launch does not load `.env`.
+Java binds selected provider settings from the single file; LOCAL ignores provider values. The launcher only selects a file and profile, never copies secrets into arguments or persistent environment. Gmail authorization remains the refresh-token writer.
 
 ### Future packaged executable contract
 
-Configuration must remain **outside** the packaged Spring Boot executable. Each workstation owns its private `.env` or external `application.properties`/`application.yml`; no persistent Windows User environment variables are required. A Boot JAR does not automatically load `.env`: a future launcher must read it and inject application settings into its child process, or use Boot's existing external configuration support, for example `java -jar docukore.jar --spring.config.additional-location=file:./config/` (with private configuration in that directory, never secrets in arguments). The application must use its own datasource settings, not the `DOCUKORE_TEST_*` credentials. `run-backend.ps1` covers the local Maven launch only; a packaged-executable launcher and production configuration redesign remain future work.
+The installer establishes PostgreSQL and its initial bootstrap account, writes the private `%ProgramData%\Docukore\.env`, and launches the packaged application. Automatic Java initialization is included in the normal JAR main. Apply restrictive file ACLs and arrange PostgreSQL service readiness; EXE, service packaging and live VM deployment remain future work.
 
 ## Database
 
@@ -208,17 +199,20 @@ Configuration must remain **outside** the packaged Spring Boot executable. Each 
 - **Host**: localhost
 - **Port**: 5432
 - **Database**: docukore
-- **Username**: docukore
-- **Password**: docukore
+- **Runtime login**: `docukore_app`
+- **Migration/provisioning login**: `docukore_migrator` (separate, not database owner)
+- **Database owner/bootstrap administrator**: existing `docukore` (OID 10; never an ordinary datasource)
+- **Passwords**: private only, no defaults; all credentials supplied in .env; existing role passwords are verified, never rotated
 
-**⚠️ These credentials are for local development only. Never commit production credentials.**
+Bootstrap performs explicit bootstrap-owned database initialization and scoped object ownership/grants. It does not demote OID 10 or rotate existing passwords. Only `reset-development` explicitly recreates confirmed disposable development/test databases; it never recreates the PostgreSQL container or volume and is not exposed as a launcher switch.
 
 ### Migrations
 
 Database migrations are managed by Flyway and located in:
 - `backend/src/main/resources/db/migration/platform/`
+- `backend/src/main/resources/db/migration/tenant/`
 
-Migrations run automatically on application startup. Platform V1–V11 includes setup/session tables plus permanent allocation/receipt and registration/provisioning/trial metadata; tenant V1–V7 remains separate. Stale-attempt recovery changed no migrations. Back up any existing database before starting a version with new migrations. Never use the application development or production database for tests; backend integration tests use the existing dedicated `docukore_test` PostgreSQL infrastructure through the root `run-backend-tests.ps1` runner.
+Platform migrations run automatically on application startup. Platform V1–V12 includes setup/session tables plus permanent allocation/receipt and registration/provisioning/trial metadata; tenant V1–V9 remains separate and runs through tenant provisioning/migration. Restarting or replaying an already ACTIVE cabinet does not apply pending tenant migrations. Stale-attempt recovery changed no migrations. Back up any existing database before starting a version with new migrations. Never use the application development or production database for tests; backend integration tests use the existing dedicated `docukore_test` PostgreSQL infrastructure through the root `run-backend-tests.ps1` runner.
 
 ## Architecture
 
@@ -237,6 +231,12 @@ Uses **PostgreSQL schema-per-tenant** isolation:
 Synchronous Hibernate routing, pooled-connection cleanup and authenticated active-membership cabinet access are implemented and tested. Cabinet provisioning now has focused transaction/recovery verification; clinical permission/entitlement enforcement remains deferred, and cabinet membership alone does not authorize medical-record operations.
 
 ## Current Status
+
+**Patient directory — Task 9.5.2 (2026-11-25):** Backend-only `GET /api/patients` provides READ-authorized, tenant-local pagination and literal case-insensitive name/number/current-phone search. Defaults are page 0 and size 20, maximum size 100; seven-field rows preserve unknown phone/birth values and omit clinical notes. Focused Maven verification passed 110 tests (65 listing + 45 creation regression), packaging and Checkstyle with zero violations. No Angular/detail/edit/archive integration. See the [contract, changed files and actual verification](docs/TASK-9-5-2-COMPLETION-REPORT.md).
+
+**Patient creation — Task 9.5.1 (2026-11-24):** Backend-only `POST /api/patients` creates identity, supplied phone and CREATE audit atomically in the trusted cabinet schema, using tenant-local backend numbering. The request mirrors the manual prototype form; no synthetic clinical/financial records or Angular API integration. See the [contract, changed files and actual verification](docs/TASK-9-5-1-COMPLETION-REPORT.md). Existing cabinets need tenant V9 applied; multiple available memberships fail closed until a cabinet-selection workflow exists.
+
+**Unified installation configuration (2026-11-24):** One literal `.env`, pre-Spring automatic PostgreSQL initialization, thin LOCAL/HOSTED launchers, shared IntelliJ configurations and Compose healthy ordering are implemented. Final packaged LOCAL/HOSTED launches returned health UP with retained database identity and no pending migration. The full run had one failure (618 tests, one intended skip); its test synchronization was corrected and the six-case class passed, but no clean full rerun exists. That checkpoint reported 77 Checkstyle errors; the later Task 9.5.1 audit passed with zero violations. IDE UI, backend-container/fresh-volume execution and installer deployment remain unexecuted; see the [implementation and verification record](docs/environment-configuration.md#7-implementation-and-verification-record--2026-11-24).
 
 **Gmail HOSTED verification integration (2026-11-20):** Explicit Gmail/Resend provider selection, offline LOCAL isolation, refresh-aware Gmail transport and a one-time local administrator OAuth command are implemented. Backend compiled and 85 focused tests passed, followed by 9 passing configuration/YAML tests; 23 mocked OAuth-command tests and both intercepted launcher modes passed. Actual private configuration syntax was validated without network calls. Real OAuth consent, receipt, HTTPS app-base configuration and live cabinet provisioning remain manual; see [Gmail setup and checklist](docs/gmail-verification-mail.md).
 

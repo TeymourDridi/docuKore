@@ -2,10 +2,11 @@ package com.docukore.support;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.flywaydb.core.Flyway;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -32,8 +33,8 @@ public final class TestFixtures
      * Creates a V10-compliant cabinet with sequential allocation using coordinated test allocator.
      * Returns a CabinetFixture with cabinetId, schemaName, and ownerId.
      *
-     * @param platformJdbc JdbcTemplate connected to platform schema (e.g., public or test_platform_xxx)
-     * @param platformSchema the platform schema name (e.g., "public", "test_platform_xxx")
+     * @param platformJdbc JdbcTemplate connected to platform schema (an explicit isolated test schema)
+     * @param platformSchema the platform schema name (e.g., "test_platform_xxx")
      * @param ownerId      Owner user UUID
      * @param resources    OwnedTestDatabase.Scope for tracking created schemas (null for metadata-only)
      * @return CabinetFixture containing all allocation details
@@ -41,11 +42,7 @@ public final class TestFixtures
     public static CabinetFixture createCabinet(JdbcTemplate platformJdbc, String platformSchema, UUID ownerId,
                                                 OwnedTestDatabase.Scope resources)
     {
-        // Validate platform schema identifier
-        if (platformSchema == null || !platformSchema.matches("[a-z][a-z0-9_]{0,62}"))
-        {
-            throw new IllegalArgumentException("Invalid platform schema identifier: " + platformSchema);
-        }
+        OwnedTestDatabase.identifier(platformSchema);
 
         if (resources != null)
         {
@@ -81,9 +78,9 @@ public final class TestFixtures
 
     /**
      * Creates a cabinet with an owner user in one call.
-     * Uses coordinated allocator with physical schema creation (no cleanup tracking for Spring Boot tests).
+     * Uses coordinated physical allocation and the exact owning platform scope for tenant cleanup.
      *
-     * @param platformJdbc JdbcTemplate connected to platform schema (public or test_platform_xxx)
+     * @param platformJdbc JdbcTemplate connected to platform schema (an explicit isolated test schema)
      * @return CabinetFixture containing all allocation details
      */
     public static CabinetFixture createCabinetWithOwner(JdbcTemplate platformJdbc)
@@ -98,15 +95,14 @@ public final class TestFixtures
             VALUES (?, ?, ?, 'fictional-hash', 'local', 'ACTIVE', now(), now())
             """.formatted(platformSchema),
             ownerId, username, usernameNormalized);
-        // Use coordinated allocator with physical schema creation but without OwnedTestDatabase tracking
-        return TestSchemaAllocator.allocateSchemaWithoutTracking(
-            platformJdbc, platformSchema, ownerId).toCabinetFixture(ownerId);
+        // Reuse the exact invocation owner rather than leaking a physical tenant from Spring fixtures.
+        return createCabinet(platformJdbc, platformSchema, ownerId, OwnedTestDatabase.owner(platformSchema));
     }
 
     /**
      * Creates a cabinet with owner and membership for a member user.
      *
-     * @param platformJdbc JdbcTemplate connected to platform schema (public or test_platform_xxx)
+     * @param platformJdbc JdbcTemplate connected to platform schema (an explicit isolated test schema)
      * @param memberRole   the membership role for the member user
      * @param staffType    the staff type for the member user
      * @return CabinetWithMembership containing the cabinet fixture and member ID
@@ -137,12 +133,13 @@ public final class TestFixtures
     /**
      * Creates a user account for testing.
      *
-     * @param platformJdbc JdbcTemplate connected to platform schema (public or test_platform_xxx)
-     * @param platformSchema the platform schema name (e.g., "public", "test_platform_xxx")
+     * @param platformJdbc JdbcTemplate connected to platform schema (an explicit isolated test schema)
+     * @param platformSchema the platform schema name (e.g., "test_platform_xxx")
      * @return the created user UUID
      */
     public static UUID createUser(JdbcTemplate platformJdbc, String platformSchema)
     {
+        OwnedTestDatabase.identifier(platformSchema);
         UUID id = UUID.randomUUID();
         String username = id.toString();
         String usernameNormalized = username.toLowerCase().trim();
@@ -157,8 +154,8 @@ public final class TestFixtures
     /**
      * Creates a membership for an existing cabinet and user.
      *
-     * @param platformJdbc JdbcTemplate connected to platform schema (public or test_platform_xxx)
-     * @param platformSchema the platform schema name (e.g., "public", "test_platform_xxx")
+     * @param platformJdbc JdbcTemplate connected to platform schema (an explicit isolated test schema)
+     * @param platformSchema the platform schema name (e.g., "test_platform_xxx")
      * @param cabinetId    the cabinet UUID
      * @param userId       the user UUID
      * @param role         the membership role
@@ -167,6 +164,7 @@ public final class TestFixtures
     public static void createMembership(
         JdbcTemplate platformJdbc, String platformSchema, UUID cabinetId, UUID userId, String role, String staffType)
     {
+        OwnedTestDatabase.identifier(platformSchema);
         platformJdbc.update("""
             INSERT INTO %s.cabinet_memberships (id, cabinet_id, user_id, membership_role, staff_type, status)
             VALUES (?, ?, ?, ?, ?, 'ACTIVE')
@@ -182,8 +180,11 @@ public final class TestFixtures
      */
     public static void createTenantProbeTable(JdbcTemplate platformJdbc, String schemaName)
     {
-        platformJdbc.execute("CREATE TABLE " + schemaName
+        String schema = OwnedTestDatabase.identifier(schemaName);
+        platformJdbc.execute("CREATE TABLE " + schema
             + ".tenant_probe (id uuid primary key, marker varchar(255) not null)");
+        platformJdbc.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE " + schema
+            + ".tenant_probe TO docukore_app");
     }
 
     /**
@@ -219,90 +220,230 @@ public final class TestFixtures
     }
 
     /**
-     * Creates a shared HikariDataSource for test classes that need a connection pool.
-     * Caller is responsible for closing.
+     * Opens a migration pool at the neutral catalog schema; callers must select an explicit fixture schema.
      *
-     * @return a configured HikariDataSource connected to the shared PostgreSQL
+     * @return a caller-owned migration pool
      */
     public static HikariDataSource createSharedDataSource()
     {
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(SharedPostgresTest.SHARED_JDBC_URL);
-        config.setUsername(SharedPostgresTest.SHARED_USER);
-        config.setPassword(SharedPostgresTest.SHARED_PASSWORD);
-        config.setMaximumPoolSize(4);
-        config.setMinimumIdle(1);
-        config.setSchema("public");
-        return new HikariDataSource(config);
+        return createMigratorDataSource("pg_catalog");
     }
 
     /**
-     * Validates that the shared PostgreSQL is available.
-     * Throws IllegalStateException if unavailable.
+     * Opens a migration/provisioning pool scoped to a trusted test schema.
      *
-     * @throws IllegalStateException if the shared PostgreSQL is not available
+     * @param schema the explicit test schema or neutral pg_catalog
+     * @return a caller-owned migration pool
+     */
+    public static HikariDataSource createMigratorDataSource(String schema)
+    {
+        return createDataSource(schema, false);
+    }
+
+    /**
+     * Opens a restricted application pool scoped to a trusted test schema.
+     *
+     * @param schema the explicit test schema or neutral pg_catalog
+     * @return a caller-owned runtime pool
+     */
+    public static HikariDataSource createRuntimeDataSource(String schema)
+    {
+        return createDataSource(schema, true);
+    }
+
+    private static HikariDataSource createDataSource(String schema, boolean runtime)
+    {
+        if (!"pg_catalog".equals(schema))
+        {
+            OwnedTestDatabase.identifier(schema);
+        }
+        // Check database and login identity before any pool or migration is initialized.
+        try (Connection ignored = runtime ? OwnedTestDatabase.runtimeConnection() : OwnedTestDatabase.connection())
+        {
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl(OwnedTestDatabase.jdbcUrl());
+            config.setUsername(runtime ? OwnedTestDatabase.runtimeUsername() : OwnedTestDatabase.username());
+            config.setPassword(runtime ? OwnedTestDatabase.runtimePassword() : OwnedTestDatabase.password());
+            config.setMaximumPoolSize(4);
+            config.setMinimumIdle(1);
+            config.setSchema(schema);
+            return new HikariDataSource(config);
+        } catch (SQLException failure)
+        {
+            throw new IllegalStateException("Test PostgreSQL is unavailable; reuse the existing service", failure);
+        }
+    }
+
+    /**
+     * Creates a fully migrated invocation-owned platform with a schema-scoped migrator JDBC fixture.
+     *
+     * @return the caller-owned platform and exact cleanup scope
+     */
+    public static OwnedPlatform createPlatform()
+    {
+        return createPlatform("platform");
+    }
+
+    /**
+     * Creates a fully migrated invocation-owned platform; no existing schema is adopted or replaced.
+     *
+     * @param kind the isolated namespace category
+     * @return the caller-owned platform and exact cleanup scope
+     */
+    public static OwnedPlatform createPlatform(String kind)
+    {
+        HikariDataSource ownershipPool = OwnedTestDatabase.acquirePool();
+        OwnedTestDatabase.Scope scope = OwnedTestDatabase.scope(ownershipPool);
+        HikariDataSource migrator = null;
+        try
+        {
+            String schema = scope.create(kind);
+            migrator = createMigratorDataSource(schema);
+            Flyway.configure().dataSource(migrator).schemas(schema).defaultSchema(schema)
+                .locations("classpath:db/migration/platform").createSchemas(false)
+                .cleanDisabled(true).baselineOnMigrate(false).load().migrate();
+            return new OwnedPlatform(schema, migrator, new JdbcTemplate(migrator), scope);
+        } catch (RuntimeException | Error failure)
+        {
+            try
+            {
+                scope.close();
+            } catch (RuntimeException | Error cleanupFailure)
+            {
+                failure.addSuppressed(cleanupFailure);
+                // Keep the ownership connection usable so refused cleanup can be investigated or retried.
+                throw failure;
+            }
+            if (migrator != null)
+            {
+                migrator.close();
+            }
+            OwnedTestDatabase.releasePool();
+            throw failure;
+        }
+    }
+
+    /** Exact platform and migrator resources, retaining ownership receipts until cleanup succeeds. */
+    public static final class OwnedPlatform implements AutoCloseable
+    {
+        /** Invocation-owned isolated platform name. */
+        private final String schema;
+        /** Migrator pool used for fixture setup, receipts and cleanup. */
+        private final HikariDataSource migratorDataSource;
+        /** Schema-scoped fixture JDBC operations; never the runtime application identity. */
+        private final JdbcTemplate jdbc;
+        /** Exact namespace and allocator provenance receipts. */
+        private final OwnedTestDatabase.Scope scope;
+        /** Whether the scope and pool were successfully closed. */
+        private boolean closed;
+
+        private OwnedPlatform(String schema, HikariDataSource migratorDataSource, JdbcTemplate jdbc,
+            OwnedTestDatabase.Scope scope)
+        {
+            this.schema = schema;
+            this.migratorDataSource = migratorDataSource;
+            this.jdbc = jdbc;
+            this.scope = scope;
+        }
+
+        public String schema()
+        {
+            return schema;
+        }
+
+        public HikariDataSource migratorDataSource()
+        {
+            return migratorDataSource;
+        }
+
+        public JdbcTemplate jdbc()
+        {
+            return jdbc;
+        }
+
+        public OwnedTestDatabase.Scope scope()
+        {
+            return scope;
+        }
+
+        @Override
+        public synchronized void close()
+        {
+            if (!closed)
+            {
+                // A refused OID/provenance cleanup must retain its scope and usable migrator pool for retry.
+                scope.close();
+                migratorDataSource.close();
+                OwnedTestDatabase.releasePool();
+                closed = true;
+            }
+        }
+    }
+
+    /**
+     * Validates the exact external test PostgreSQL database using migration credentials.
+     *
+     * @throws IllegalStateException if the existing service is unavailable
      */
     public static void validateSharedPostgres()
     {
-        try (Connection conn = DriverManager.getConnection(
-                SharedPostgresTest.SHARED_JDBC_URL,
-                SharedPostgresTest.SHARED_USER,
-                SharedPostgresTest.SHARED_PASSWORD))
+        try (Connection connection = OwnedTestDatabase.connection())
         {
-            if (!conn.isValid(5))
+            if (!connection.isValid(5))
             {
-                throw new IllegalStateException("Shared PostgreSQL at "
-                    + SharedPostgresTest.SHARED_JDBC_URL + " is not available");
+                throw new IllegalStateException("The existing test PostgreSQL service is unavailable");
             }
-        } catch (Exception e)
+        } catch (SQLException failure)
         {
-            throw new IllegalStateException(
-                "Cannot connect to shared PostgreSQL. Ensure docukore-postgres container is running. "
-                + "Start with: docker compose -f infrastructure/docker/docker-compose.yml up -d", e);
+            throw new IllegalStateException("Test PostgreSQL is unavailable; reuse the existing service", failure);
         }
     }
 
     /**
-     * Runs a database action with a fresh connection from the shared pool.
-     * Useful for test setup/teardown that needs direct JDBC access.
+     * Runs a database action on a fresh validated migration connection at a neutral search path.
      *
-     * @param action the database action to execute with the connection
+     * @param action the database action to execute
      */
     public static void withConnection(Consumer<Connection> action)
     {
-        try (Connection conn = DriverManager.getConnection(
-                SharedPostgresTest.SHARED_JDBC_URL,
-                SharedPostgresTest.SHARED_USER,
-                SharedPostgresTest.SHARED_PASSWORD))
+        try (Connection connection = OwnedTestDatabase.connection())
         {
-            action.accept(conn);
-        } catch (Exception e)
+            action.accept(connection);
+        } catch (SQLException failure)
         {
-            throw new RuntimeException("Database operation failed", e);
+            throw new IllegalStateException("Test database operation failed", failure);
         }
     }
 
     /**
-     * Extracts the platform schema name from the JdbcTemplate's datasource.
-     * Works with both direct connections and Hikari pooled connections.
+     * Resolves only an explicit trusted schema on the same connection; never falls back to public.
      *
-     * @param jdbc JdbcTemplate to inspect
-     * @return the schema name (e.g., "public" or "test_platform_xxx")
+     * @param jdbc the schema-scoped fixture JDBC operations
+     * @return the validated isolated schema name
      */
     public static String getPlatformSchema(JdbcTemplate jdbc)
     {
-        try (var conn = jdbc.getDataSource().getConnection())
+        if (jdbc.getDataSource() == null)
         {
-            // For HikariCP, get the schema from the connection's metadata
-            var metaData = conn.getMetaData();
-            String url = metaData.getURL();
-            // Extract schema from current_schema setting or default to public
-            String schema = jdbc.queryForObject("SELECT current_schema()", String.class);
-            return schema != null ? schema : "public";
-        } catch (Exception e)
+            throw new IllegalStateException("Fixture JDBC requires an explicit schema-scoped datasource");
+        }
+        try (Connection connection = jdbc.getDataSource().getConnection())
         {
-            // Fallback to public for compatibility
-            return "public";
+            OwnedTestDatabase.validate(connection);
+            try (var statement = connection.createStatement();
+                 var result = statement.executeQuery("SELECT current_schema()"))
+            {
+                if (!result.next())
+                {
+                    throw new IllegalStateException("Fixture datasource has no current schema");
+                }
+                String schema = result.getString(1);
+                OwnedTestDatabase.identifier(schema);
+                return schema;
+            }
+        } catch (SQLException failure)
+        {
+            throw new IllegalStateException("Cannot resolve explicit fixture schema", failure);
         }
     }
 }

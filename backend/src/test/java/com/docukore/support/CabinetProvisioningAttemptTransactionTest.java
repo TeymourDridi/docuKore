@@ -1,5 +1,6 @@
 package com.docukore.support;
 
+import com.docukore.identity.DeploymentProperties;
 import com.docukore.platform.PlatformProperties;
 import com.docukore.platform.cabinet.CabinetRegistrationRepository;
 import com.docukore.platform.provisioning.CabinetProvisioningException;
@@ -9,7 +10,6 @@ import com.docukore.platform.provisioning.ProvisioningStatus;
 import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
@@ -84,10 +84,6 @@ class CabinetProvisioningAttemptTransactionTest
     @BeforeAll
     static void openPlatform() throws Exception
     {
-        Assumptions.assumeTrue(configured("docukore.test.jdbc-url", "DOCUKORE_TEST_JDBC_URL")
-            && configured("docukore.test.username", "DOCUKORE_TEST_USERNAME")
-            && configured("docukore.test.password", "DOCUKORE_TEST_PASSWORD"),
-            "Dedicated PostgreSQL test configuration unavailable; no application database fallback");
         DATA_SOURCE = OwnedTestDatabase.acquirePool();
         JDBC = new JdbcTemplate(DATA_SOURCE);
         var manager = new DataSourceTransactionManager(DATA_SOURCE);
@@ -97,16 +93,17 @@ class CabinetProvisioningAttemptTransactionTest
         QUOTED_PLATFORM = OwnedTestDatabase.identifier(PLATFORM);
         OwnedTestDatabase.requireOwned(PLATFORM);
         Flyway.configure().dataSource(DATA_SOURCE).schemas(PLATFORM).defaultSchema(PLATFORM)
-            .locations("classpath:db/migration/platform").target("11").createSchemas(false)
+            .locations("classpath:db/migration/platform").createSchemas(false)
             .cleanDisabled(true).baselineOnMigrate(false).load().migrate();
-        assertEquals(11, JDBC.queryForObject("SELECT count(*) FROM " + QUOTED_PLATFORM
+        assertEquals(12, JDBC.queryForObject("SELECT count(*) FROM " + QUOTED_PLATFORM
             + ".flyway_schema_history WHERE success AND version IS NOT NULL", Integer.class));
         initializeFreshSequence();
         REPOSITORY = new CabinetRegistrationRepository(DATA_SOURCE, manager, PLATFORM);
         SERVICE = new CabinetProvisioningService(REPOSITORY, new CabinetProvisioningProperties(
             OwnedTestDatabase.jdbcUrl(), OwnedTestDatabase.username(), OwnedTestDatabase.password(),
             Duration.ofSeconds(2), Duration.ofSeconds(5), Duration.ofSeconds(30), Duration.ofSeconds(45)),
-            JDBC, new PlatformProperties(PLATFORM));
+            JDBC, new PlatformProperties(PLATFORM),
+            new DeploymentProperties(DeploymentProperties.Mode.HOSTED));
 
         // DriverManager tries drivers in registration order. Never replace PostgreSQL with a JDBC mock.
         ORIGINAL_DRIVERS.addAll(Collections.list(DriverManager.getDrivers()));
@@ -733,16 +730,6 @@ class CabinetProvisioningAttemptTransactionTest
         {
             throw new AssertionError("Cannot invoke existing failure-recording boundary", failure);
         }
-    }
-
-    private static boolean configured(String property, String environment)
-    {
-        String value = System.getProperty(property);
-        if (value == null || value.isBlank())
-        {
-            value = System.getenv(environment);
-        }
-        return value != null && !value.isBlank();
     }
 
     private static void initializeFreshSequence()

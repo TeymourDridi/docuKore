@@ -1,5 +1,7 @@
 package com.docukore.platform.provisioning;
 
+import com.docukore.identity.DeploymentProperties;
+import com.docukore.platform.DatabaseRoleVerifier;
 import com.docukore.platform.PlatformProperties;
 import com.docukore.platform.cabinet.CabinetRegistrationRepository;
 import org.flywaydb.core.Flyway;
@@ -50,16 +52,21 @@ public class CabinetProvisioningService
     /** Platform schema name for qualified table references. */
     private final String platformSchema;
 
+    /** Deployment mode detection (LOCAL vs HOSTED). */
+    private final DeploymentProperties deploymentProperties;
+
     public CabinetProvisioningService(
         CabinetRegistrationRepository registrationRepository,
         CabinetProvisioningProperties properties,
         JdbcTemplate platformJdbc,
-        PlatformProperties platform)
+        PlatformProperties platform,
+        DeploymentProperties deploymentProperties)
     {
         this.registrationRepository = registrationRepository;
         this.properties = properties;
         this.platformJdbc = platformJdbc;
         this.platformSchema = platform.schema();
+        this.deploymentProperties = deploymentProperties;
     }
 
     /**
@@ -164,6 +171,8 @@ public class CabinetProvisioningService
                 provisioningConn.commit();
                 applyTenantMigrations(schemaName);
                 LOG.debug("event=CABINET_PROVISIONING_PHASE phase=MIGRATIONS_RETURNED");
+                phase = "RUNTIME_GRANTS";
+                DatabaseRoleVerifier.verifyTenantAccess(provisioningConn, schemaName);
                 phase = "ACTIVATION";
                 requireAttemptOwnership(provisioningConn, cabinetId, attemptId);
 
@@ -298,6 +307,7 @@ public class CabinetProvisioningService
         // All completed evidence is read on the same lock-owning session.
         verifyExistingSchemaReceipt(conn, cabinetId, schemaName, reservationId);
         validateTenantMigrations(conn, schemaName);
+        DatabaseRoleVerifier.verifyTenantAccess(conn, schemaName);
         try (PreparedStatement membership = conn.prepareStatement(
             "SELECT COUNT(*) FROM \"" + platformSchema
                 + "\".cabinet_memberships WHERE cabinet_id = ? AND user_id = ? AND status = 'ACTIVE'"))
@@ -430,11 +440,12 @@ public class CabinetProvisioningService
     {
         try (PreparedStatement history = conn.prepareStatement(
             "SELECT COUNT(*) FROM \"" + schemaName
-                + "\".flyway_schema_history_tenant WHERE success = true"))
+                + "\".flyway_schema_history_tenant WHERE success = true "
+                + "AND type = 'SQL' AND version IN ('1', '2', '3', '4', '5', '6', '7', '8')"))
         {
             try (ResultSet rs = history.executeQuery())
             {
-                if (!rs.next() || rs.getInt(1) == 0)
+                if (!rs.next() || rs.getInt(1) != 8)
                 {
                     throw new CabinetProvisioningException("TENANT_MIGRATIONS_INCOMPLETE");
                 }
@@ -774,8 +785,9 @@ public class CabinetProvisioningService
         }
 
         requireAdvisoryLock(conn, cabinetId);
-        // Validate tenant migrations completed successfully on the lock-owning session.
+        // Validate migrations and effective runtime grants before activation on the lock-owning session.
         validateTenantMigrations(conn, schemaName);
+        DatabaseRoleVerifier.verifyTenantAccess(conn, schemaName);
 
         // Verify creation receipt matches allocation and catalog identity
         verifyExistingSchemaReceipt(conn, cabinetId, schemaName, reservationId);
@@ -795,20 +807,23 @@ public class CabinetProvisioningService
         }
 
         requireAttemptOwnership(conn, cabinetId, attemptId);
-        // Create initial 720-hour trial subscription
-        UUID subscriptionId = UUID.randomUUID();
-        Instant now = Instant.now();
-        Instant trialEnd = now.plusSeconds(720 * 3600);
-        try (PreparedStatement subscriptionStmt = conn.prepareStatement(
-            "INSERT INTO \"" + platformSchema
-                + "\".cabinet_subscriptions (id, cabinet_id, subscription_status, trial_started_at, trial_ends_at) "
-                + "VALUES (?, ?, 'TRIAL', ?, ?)"))
+        // Create initial 720-hour trial subscription (HOSTED only; LOCAL mode has no subscriptions)
+        if (!deploymentProperties.local())
         {
-            subscriptionStmt.setObject(1, subscriptionId);
-            subscriptionStmt.setObject(2, cabinetId);
-            subscriptionStmt.setTimestamp(3, Timestamp.from(now));
-            subscriptionStmt.setTimestamp(4, Timestamp.from(trialEnd));
-            subscriptionStmt.executeUpdate();
+            UUID subscriptionId = UUID.randomUUID();
+            Instant now = Instant.now();
+            Instant trialEnd = now.plusSeconds(720 * 3600);
+            try (PreparedStatement subscriptionStmt = conn.prepareStatement(
+                "INSERT INTO \"" + platformSchema
+                    + "\".cabinet_subscriptions (id, cabinet_id, subscription_status, trial_started_at, trial_ends_at) "
+                    + "VALUES (?, ?, 'TRIAL', ?, ?)"))
+            {
+                subscriptionStmt.setObject(1, subscriptionId);
+                subscriptionStmt.setObject(2, cabinetId);
+                subscriptionStmt.setTimestamp(3, Timestamp.from(now));
+                subscriptionStmt.setTimestamp(4, Timestamp.from(trialEnd));
+                subscriptionStmt.executeUpdate();
+            }
         }
 
         requireAttemptOwnership(conn, cabinetId, attemptId);

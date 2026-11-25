@@ -28,6 +28,46 @@ import static org.mockito.Mockito.when;
 /** Real scope/registry regressions at the JDBC boundary; no live schema creation or cleanup. */
 class OwnedTestDatabaseProvenanceTest
 {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void ownershipScopeRejectsRuntimeLoginOrEffectiveRoleBeforeCreatingSchema(boolean runtimeLogin) throws Exception
+    {
+        Fixture fixture = new Fixture();
+        if (runtimeLogin)
+        {
+            fixture.sessionUser = "docukore_app";
+        } else
+        {
+            fixture.effectiveUser = "docukore_app";
+        }
+        var scope = OwnedTestDatabase.scope(fixture.dataSource);
+        assertThrows(IllegalStateException.class, () -> scope.createExact(fixture.schema));
+        assertFalse(fixture.present);
+        assertEquals(0, fixture.dropCount);
+        assertFalse(fixture.events.contains("create"));
+        assertThrows(IllegalStateException.class, () -> OwnedTestDatabase.owner(fixture.schema));
+    }
+
+    @Test
+    void runtimeValidationAcceptsOnlyTheApplicationEffectiveAndLoginRole() throws Exception
+    {
+        Fixture fixture = new Fixture();
+        try (Connection connection = fixture.connection())
+        {
+            assertThrows(IllegalStateException.class, () -> OwnedTestDatabase.validateRuntime(connection));
+        }
+        fixture.effectiveUser = "docukore_app";
+        fixture.sessionUser = "docukore_app";
+        try (Connection connection = fixture.connection())
+        {
+            OwnedTestDatabase.validateRuntime(connection);
+        }
+        try (Connection connection = fixture.connection())
+        {
+            assertThrows(IllegalStateException.class, () -> OwnedTestDatabase.validate(connection));
+        }
+    }
+
     @Test
     void anotherScopeCannotRegisterAnOwnedNamespace() throws Exception
     {
@@ -296,10 +336,8 @@ class OwnedTestDatabaseProvenanceTest
     @ValueSource(booleans = {true, false})
     void postgresOwnershipCannotTransferAndFailedCleanupCanBeRetried(boolean failCleanup) throws Exception
     {
-        Assumptions.assumeTrue(configured("docukore.test.jdbc-url", "DOCUKORE_TEST_JDBC_URL")
-            && configured("docukore.test.username", "DOCUKORE_TEST_USERNAME")
-            && configured("docukore.test.password", "DOCUKORE_TEST_PASSWORD"),
-            "Dedicated PostgreSQL configuration unavailable; no application database fallback");
+        Assumptions.assumeTrue(OwnedTestDatabase.hasExternalConfiguration(),
+            "Live PostgreSQL methods require an explicit test launch; mock-only methods need no database arguments");
         DataSource dataSource = mock(DataSource.class);
         boolean[] readOnly = {false};
         when(dataSource.getConnection()).thenAnswer(invocation ->
@@ -396,16 +434,6 @@ class OwnedTestDatabaseProvenanceTest
         }
     }
 
-    private static boolean configured(String property, String environment)
-    {
-        String value = System.getProperty(property);
-        if (value == null || value.isBlank())
-        {
-            value = System.getenv(environment);
-        }
-        return value != null && !value.isBlank();
-    }
-
     /** JDBC doubles expose catalog/receipt rows; all authorization and ownership logic remains real. */
     private static final class Fixture
     {
@@ -420,6 +448,10 @@ class OwnedTestDatabaseProvenanceTest
             new OwnedTestDatabase.NamespaceIdentity(schema, 11, 12);
         /** Catalog response, optionally replaced for negative tests. */
         private OwnedTestDatabase.NamespaceIdentity actual = original;
+        /** Effective role returned by the JDBC boundary. */
+        private String effectiveUser = "docukore_test_runner";
+        /** Original session login returned by the JDBC boundary. */
+        private String sessionUser = "docukore_test_runner";
         /** External JDBC boundary. */
         private final DataSource dataSource = mock(DataSource.class);
         /** Ordered transaction and DDL events. */
@@ -457,6 +489,11 @@ class OwnedTestDatabaseProvenanceTest
                 when(database.next()).thenReturn(true, false);
                 when(database.getString(1)).thenReturn("docukore_test");
                 when(statement.executeQuery("SELECT current_database()")).thenReturn(database);
+                ResultSet roles = mock(ResultSet.class);
+                when(roles.next()).thenReturn(true, false);
+                when(roles.getString(1)).thenReturn(effectiveUser);
+                when(roles.getString(2)).thenReturn(sessionUser);
+                when(statement.executeQuery("SELECT current_user, session_user")).thenReturn(roles);
                 when(statement.execute(anyString())).thenAnswer(execution ->
                 {
                     String sql = execution.getArgument(0);

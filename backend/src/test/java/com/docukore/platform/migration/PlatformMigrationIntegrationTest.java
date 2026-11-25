@@ -212,9 +212,9 @@ class PlatformMigrationIntegrationTest extends PostgresMigrationTest
     }
 
     @Test
-    void platformHasExactlyElevenSuccessfulVersionedMigrations()
+    void platformHasExactlyTwelveSuccessfulVersionedMigrations()
     {
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"), jdbc.queryForList(
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), jdbc.queryForList(
             "SELECT version FROM " + platformSchema
                 + ".flyway_schema_history WHERE success AND version IS NOT NULL ORDER BY installed_rank",
             String.class));

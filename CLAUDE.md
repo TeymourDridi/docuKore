@@ -33,6 +33,17 @@ Pin selected versions consistently and document important version decisions.
 - Maintain clear separation between application, domain and infrastructure responsibilities.
 - Make architectural decisions consistently across the entire project.
 
+### Installation configuration and database startup
+
+- One private `.env` per installation: project root (development), `%ProgramData%\Docukore\.env` (Windows), deployment root (HOSTED Compose).
+- Java loads literal configuration and completes `DatabaseBootstrap.initialize` before Spring startup, datasource and Flyway initialization.
+- Bootstrap connects to maintenance `postgres` through `DOCUKORE_BOOTSTRAP_*`; runtime uses `DB_*`, migrations `DOCUKORE_MIGRATION_*`, provisioning `DOCUKORE_PROVISIONING_*`.
+- Preserve existing role privileges, data and Flyway histories. Create genuinely missing application database/roles using supplied passwords; never rotate existing passwords or reset during ordinary startup.
+- Normal startup never initializes `docukore_test`. Explicit `--docukore.initialize-test` is dedicated test maintenance only.
+- Never reintroduce `.local/database.env`, `.local/bootstrap.properties`, duplicate credential sources or separate initializer containers.
+- Compose PostgreSQL reads selected bootstrap credentials literally from the same mounted `.env` through `postgres-env.sh`, then delegates to the official image entrypoint; never interpolate passwords in Compose.
+- Use `DOCUKORE_ENV_FILE` or `-Ddocukore.env.file` with an absolute path for installed launchers; no working-directory dependency.
+
 ### Multi-tenancy
 
 Use PostgreSQL schema-per-tenant isolation.

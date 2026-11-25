@@ -9,7 +9,7 @@ import javax.sql.DataSource;
 
 /**
  * Enables cabinet provisioning capability configuration.
- * Properties validation is deferred until provisioning is invoked.
+ * Startup migration validation enforces separate credentials; timeouts are checked again on provisioning.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(CabinetProvisioningProperties.class)

@@ -44,6 +44,10 @@ public class Patient
     @Embedded
     private BirthDate birthDate;
 
+    /** Optional initial note; length validation belongs to the application. */
+    @Column(name = "initial_note", columnDefinition = "text")
+    private String initialNote;
+
     /** Legacy source system identifier. */
     @Column(name = "legacy_source_system_id")
     private UUID legacySourceSystemId;
@@ -106,6 +110,7 @@ public class Patient
         this.legalGivenName = Objects.requireNonNull(legalGivenName, "legalGivenName");
         this.legalFamilyName = Objects.requireNonNull(legalFamilyName, "legalFamilyName");
         this.createdBy = Objects.requireNonNull(createdBy, "createdBy");
+        this.updatedBy = this.createdBy;
         this.birthDate = BirthDate.unknown();
         Instant now = instant(clock);
         this.createdAt = now;
@@ -184,6 +189,18 @@ public class Patient
     public BirthPrecision getBirthPrecision()
     {
         return birthDate.precision();
+    }
+
+    public String getInitialNote()
+    {
+        return initialNote;
+    }
+
+    public void setInitialNote(String initialNote, Clock clock)
+    {
+        Instant now = instant(clock);
+        this.initialNote = initialNote;
+        this.updatedAt = now;
     }
 
     public UUID getLegacySourceSystemId()

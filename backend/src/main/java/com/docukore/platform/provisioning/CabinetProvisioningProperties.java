@@ -35,16 +35,13 @@ public record CabinetProvisioningProperties(String url, String username, String 
     /** Defaults do not enable provisioning or establish a connection during application startup. */
     public CabinetProvisioningProperties
     {
-        LOG.debug("Initializing provisioning properties - timeouts configured");
         lockTimeout = lockTimeout == null ? Duration.ofSeconds(10) : lockTimeout;
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(5) : connectTimeout;
         statementTimeout = statementTimeout == null ? Duration.ofSeconds(60) : statementTimeout;
         networkTimeout = networkTimeout == null ? Duration.ofSeconds(90) : networkTimeout;
-        LOG.debug("Provisioning timeouts set - lock: {}, connect: {}, statement: {}, network: {}",
-            lockTimeout, connectTimeout, statementTimeout, networkTimeout);
     }
 
-    /** Validates only when the capability is called; invalid settings do not disable authentication. */
+    /** Validate at migration startup and again at each provisioning boundary. */
     void requireEnabled()
     {
         LOG.debug("Validating provisioning properties");
@@ -59,10 +56,7 @@ public record CabinetProvisioningProperties(String url, String username, String 
                 || !bounded(statementTimeout, 600) || !bounded(networkTimeout, 900)
                 || networkTimeout.compareTo(statementTimeout) < 0)
         {
-            LOG.error("Invalid provisioning configuration - url format: {}, timeout ranges valid: {}",
-                url != null && url.startsWith("jdbc:postgresql://") ? "format ok" : "invalid",
-                bounded(lockTimeout, 60) && bounded(connectTimeout, 30)
-                    && bounded(statementTimeout, 600) && bounded(networkTimeout, 900));
+            LOG.error("event=PROVISIONING_CONFIGURATION_REJECTED code=CONNECTION_BOUNDS");
             throw new CabinetProvisioningException("PROVISIONING_CONFIGURATION");
         }
         int query = url.indexOf('?');
@@ -73,7 +67,7 @@ public record CabinetProvisioningProperties(String url, String username, String 
                 String key = option.split("=", 2)[0].toLowerCase(Locale.ROOT);
                 if (!URL_OPTIONS.contains(key))
                 {
-                    LOG.error("Invalid URL option detected - option: {}", key);
+                    LOG.error("event=PROVISIONING_CONFIGURATION_REJECTED code=URL_OPTIONS");
                     throw new CabinetProvisioningException("PROVISIONING_CONFIGURATION");
                 }
             }

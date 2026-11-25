@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.docukore.identity.DeploymentProperties;
 import com.docukore.platform.PlatformProperties;
 import com.docukore.platform.cabinet.CabinetRegistrationRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -349,7 +350,8 @@ class CabinetProvisioningDiagnosticsTest
     private CabinetProvisioningService service(CabinetProvisioningProperties configuration)
     {
         return new CabinetProvisioningService(registrations, configuration, jdbc,
-            new PlatformProperties("synthetic_platform_schema"));
+            new PlatformProperties("synthetic_platform_schema"),
+            new DeploymentProperties(DeploymentProperties.Mode.HOSTED));
     }
 
     private static CabinetProvisioningProperties properties(Duration lockTimeout)

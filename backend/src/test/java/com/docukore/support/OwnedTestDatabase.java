@@ -20,6 +20,10 @@ public final class OwnedTestDatabase
 {
     /** Target test database name. */
     private static final String TEST_DATABASE = "docukore_test";
+    /** Fixed migration and provisioning identity for the disposable external test database. */
+    private static final String MIGRATOR_USER = "docukore_test_runner";
+    /** Fixed restricted application identity for runtime integration coverage. */
+    private static final String RUNTIME_USER = "docukore_app";
     /** Map of owned schema names to their owning Scope. */
     private static final Map<String, Scope> OWNERS = new LinkedHashMap<>();
     /** Scope authorized for each pending physical schema allocation; never reassigned between scopes. */
@@ -37,8 +41,9 @@ public final class OwnedTestDatabase
     {
         /** Test JDBC URL. */
         private static final String URL = required("docukore.test.jdbc-url", "DOCUKORE_TEST_JDBC_URL");
-        /** Test database username. */
-        private static final String USER = required("docukore.test.username", "DOCUKORE_TEST_USERNAME");
+        /** Explicit test migration/provisioning username; never the application role. */
+        private static final String USER = requiredRole("docukore.test.username", "DOCUKORE_TEST_USERNAME",
+            MIGRATOR_USER);
         /** Test database password. */
         private static final String PASSWORD = required("docukore.test.password", "DOCUKORE_TEST_PASSWORD");
 
@@ -65,6 +70,28 @@ public final class OwnedTestDatabase
         }
     }
 
+    /** Runtime arguments remain lazy so migrator-only and mocked tests need no application password. */
+    private static final class RuntimeConfiguration
+    {
+        /** Explicit restricted runtime username. */
+        private static final String USER = requiredRole("docukore.test.runtime-username",
+            "DOCUKORE_TEST_RUNTIME_USERNAME", RUNTIME_USER);
+        /** Externally supplied runtime password, with no shared migrator or application fallback. */
+        private static final String PASSWORD = required("docukore.test.runtime-password",
+            "DOCUKORE_TEST_RUNTIME_PASSWORD");
+    }
+
+    private static String requiredRole(String property, String environment, String expected)
+    {
+        String value = required(property, environment);
+        if (!expected.equals(value))
+        {
+            throw new IllegalStateException("Test identity from " + property + " or " + environment
+                + " must be " + expected);
+        }
+        return value;
+    }
+
     private static String required(String property, String environment)
     {
         String value = System.getProperty(property);
@@ -80,6 +107,33 @@ public final class OwnedTestDatabase
         return value;
     }
 
+    /**
+     * Detects any externally supplied test argument without loading credentials or connecting to PostgreSQL.
+     * Mixed unit/integration classes may skip live methods only when no test configuration was supplied at all.
+     *
+     * @return whether the launch explicitly supplied any test database argument
+     */
+    public static boolean hasExternalConfiguration()
+    {
+        String[][] arguments = {
+            {"docukore.test.jdbc-url", "DOCUKORE_TEST_JDBC_URL"},
+            {"docukore.test.username", "DOCUKORE_TEST_USERNAME"},
+            {"docukore.test.password", "DOCUKORE_TEST_PASSWORD"},
+            {"docukore.test.runtime-username", "DOCUKORE_TEST_RUNTIME_USERNAME"},
+            {"docukore.test.runtime-password", "DOCUKORE_TEST_RUNTIME_PASSWORD"}
+        };
+        for (String[] argument : arguments)
+        {
+            String property = System.getProperty(argument[0]);
+            String environment = System.getenv(argument[1]);
+            if (property != null && !property.isBlank() || environment != null && !environment.isBlank())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static String jdbcUrl()
     {
         return Configuration.URL;
@@ -93,7 +147,49 @@ public final class OwnedTestDatabase
         return Configuration.PASSWORD;
     }
 
+    /**
+     * Returns the required restricted runtime identity.
+     *
+     * @return the fixed application role
+     */
+    public static String runtimeUsername()
+    {
+        return RuntimeConfiguration.USER;
+    }
+
+    /**
+     * Returns the externally supplied runtime password without a migrator fallback.
+     *
+     * @return the required application-role password
+     */
+    public static String runtimePassword()
+    {
+        return RuntimeConfiguration.PASSWORD;
+    }
+
+    /**
+     * Checks server database and effective/login identity before migration or ownership operations.
+     *
+     * @param connection the migration connection to validate
+     * @throws SQLException if PostgreSQL identity cannot be queried
+     */
     public static void validate(Connection connection) throws SQLException
+    {
+        validateIdentity(connection, MIGRATOR_USER);
+    }
+
+    /**
+     * Checks the restricted runtime identity independently of migration credentials.
+     *
+     * @param connection the runtime connection to validate
+     * @throws SQLException if PostgreSQL identity cannot be queried
+     */
+    public static void validateRuntime(Connection connection) throws SQLException
+    {
+        validateIdentity(connection, RUNTIME_USER);
+    }
+
+    private static void validateIdentity(Connection connection, String expectedUser) throws SQLException
     {
         try (var statement = connection.createStatement();
              var result = statement.executeQuery("SELECT current_database()"))
@@ -103,14 +199,46 @@ public final class OwnedTestDatabase
                 throw new IllegalStateException("Refusing connection: server database is not docukore_test");
             }
         }
+        try (var statement = connection.createStatement();
+             var result = statement.executeQuery("SELECT current_user, session_user"))
+        {
+            if (!result.next() || !expectedUser.equals(result.getString(1))
+                || !expectedUser.equals(result.getString(2)))
+            {
+                throw new IllegalStateException("Refusing test connection: effective and login roles must be "
+                    + expectedUser);
+            }
+        }
     }
 
     public static Connection connection() throws SQLException
     {
-        Connection connection = DriverManager.getConnection(jdbcUrl(), username(), password());
+        return openConnection(username(), password(), false);
+    }
+
+    /**
+     * Opens a validated runtime connection to the exact external test database at a neutral search path.
+     *
+     * @return a caller-owned application connection
+     * @throws SQLException if the existing PostgreSQL service is unavailable
+     */
+    public static Connection runtimeConnection() throws SQLException
+    {
+        return openConnection(runtimeUsername(), runtimePassword(), true);
+    }
+
+    private static Connection openConnection(String user, String secret, boolean runtime) throws SQLException
+    {
+        Connection connection = DriverManager.getConnection(jdbcUrl(), user, secret);
         try
         {
-            validate(connection);
+            if (runtime)
+            {
+                validateRuntime(connection);
+            } else
+            {
+                validate(connection);
+            }
             connection.setSchema("pg_catalog");
             return connection;
         } catch (SQLException | RuntimeException failure)
@@ -184,6 +312,13 @@ public final class OwnedTestDatabase
         owner(schema).requireIdentity(schema);
     }
 
+    /**
+     * Immutable live namespace identity captured at creation, never inferred from readable receipt metadata.
+     *
+     * @param schemaName the exact isolated namespace
+     * @param namespaceOid the PostgreSQL namespace object identifier
+     * @param ownerOid the namespace owner role object identifier
+     */
     public record NamespaceIdentity(String schemaName, long namespaceOid, long ownerOid)
     {
     }
@@ -197,6 +332,13 @@ public final class OwnedTestDatabase
         /** Exact allocator provenance authorized before physical creation, retained until safe cleanup. */
         private final Map<String, AllocationProvenance> allocations = new LinkedHashMap<>();
 
+        /**
+         * Exact test allocator authority retained until identity-safe cleanup succeeds.
+         *
+         * @param platformSchema the isolated allocation receipt namespace
+         * @param reservationId the exact allocator reservation
+         * @param cabinetId the cabinet bound to that reservation
+         */
         private record AllocationProvenance(String platformSchema, UUID reservationId, UUID cabinetId)
         {
         }
@@ -206,7 +348,13 @@ public final class OwnedTestDatabase
             this.dataSource = dataSource;
         }
 
-        String create(String kind)
+        /**
+         * Create a fresh invocation-owned namespace for fixtures outside the support package.
+         *
+         * @param kind the test namespace category
+         * @return the newly owned schema name
+         */
+        public String create(String kind)
         {
             String name = "test_" + kind + "_" + UUID.randomUUID().toString().replace("-", "");
             createExact(name);
@@ -637,12 +785,7 @@ public final class OwnedTestDatabase
 
     private static String platformIdentifier(String schema)
     {
-        if (schema == null || !schema.matches("[a-z][a-z0-9_]{0,62}") || schema.startsWith("pg_")
-                || schema.equals("information_schema"))
-        {
-            throw new IllegalArgumentException("Invalid platform schema identifier: " + schema);
-        }
-        return '"' + schema + '"';
+        return identifier(schema);
     }
 
     private static void rollback(Connection connection, Throwable failure)

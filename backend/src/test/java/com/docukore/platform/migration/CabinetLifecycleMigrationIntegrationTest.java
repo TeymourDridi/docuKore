@@ -25,10 +25,10 @@ class CabinetLifecycleMigrationIntegrationTest extends CabinetPlatformMigrationT
 
     @ParameterizedTest
     @ValueSource(strings = {"public", "portable"})
-    void freshPlatformHasElevenMigrationsWithoutAllocatingCabinets(String kind)
+    void freshPlatformHasTwelveMigrationsWithoutAllocatingCabinets(String kind)
     {
         String schema = platform(kind, "latest");
-        assertElevenVersions(schema);
+        assertTwelveVersions(schema);
         requireSequence(schema);
         requireTable(schema, "cabinet_schema_allocations");
         requireTable(schema, "cabinet_schema_creation_receipts");
@@ -96,7 +96,7 @@ class CabinetLifecycleMigrationIntegrationTest extends CabinetPlatformMigrationT
 
         upgrade(schema);
 
-        assertElevenVersions(schema);
+        assertTwelveVersions(schema);
         assertEquals(platformHistory, history(schema, "flyway_schema_history").subList(0, 9));
         assertEquals(tenantHistory, history(legacyName(first),
             "flyway_schema_history_tenant"));

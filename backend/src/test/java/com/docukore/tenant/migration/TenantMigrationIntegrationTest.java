@@ -65,11 +65,11 @@ class TenantMigrationIntegrationTest extends PostgresMigrationTest
     }
 
     @Test
-    void freshSchemasHaveSeventeenTablesAndIndependentSevenVersionHistories()
+    void freshSchemasHaveSeventeenTablesAndIndependentNineVersionHistories()
     {
         String first = tenant("latest");
         String second = tenant("latest");
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7"), history(first));
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9"), history(first));
         assertEquals(history(first), history(second));
         assertEquals(17, jdbc.queryForObject(
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = ? "
@@ -314,13 +314,36 @@ class TenantMigrationIntegrationTest extends PostgresMigrationTest
         contact(schema, id, "PHONE", PHONE, true);
         assertEquals(List.of("1", "2", "3", "4", "5", "6"), history(schema));
         tenantFlyway(schema, "latest").migrate();
-        assertEquals(7, history(schema).size());
+        assertEquals(9, history(schema).size());
         assertEquals(1, jdbc.queryForObject(
             "SELECT count(*) FROM " + schema + ".patients WHERE id = ?",
             Integer.class, id));
         assertEquals("original fictional input", jdbc.queryForObject(
             "SELECT value FROM " + schema + ".patient_contacts",
             String.class));
+    }
+
+    @Test
+    void patientCreationUpgradePreservesRowsAndStartsNumbersAfterExistingPatientNumbers()
+    {
+        String schema = tenant("8");
+        UUID id = patient(schema, "PAT-000042");
+        patient(schema, "legacy-number");
+        List<String> originalHistory = history(schema);
+        tenantFlyway(schema, "latest").migrate();
+        assertEquals(originalHistory, history(schema).subList(0, 8));
+        assertEquals("9", history(schema).getLast());
+        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM " + schema + ".patients", Integer.class));
+        assertEquals("PAT-000042", jdbc.queryForObject(
+            "SELECT patient_number FROM " + schema + ".patients WHERE id = ?", String.class, id));
+        assertEquals(0, jdbc.queryForObject(
+            "SELECT count(*) FROM " + schema + ".patients WHERE initial_note IS NOT NULL", Integer.class));
+        assertEquals(43L, jdbc.queryForObject(
+            "SELECT nextval('" + schema + ".patient_number_seq')", Long.class));
+        assertEquals(44L, jdbc.queryForObject(
+            "SELECT nextval('" + schema + ".patient_number_seq')", Long.class));
+        assertEquals(0, jdbc.queryForObject(
+            "SELECT count(*) FROM " + schema + ".patient_contacts", Integer.class));
     }
 
     @ParameterizedTest

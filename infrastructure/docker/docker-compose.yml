@@ -2,19 +2,42 @@ services:
   postgres:
     image: postgres:18.7
     container_name: docukore-postgres
-    environment:
-      POSTGRES_DB: docukore
-      POSTGRES_USER: docukore
-      POSTGRES_PASSWORD: docukore
+    entrypoint: ["bash", "/usr/local/bin/docukore-postgres-env.sh"]
+    command: ["postgres"]
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${DOCUKORE_POSTGRES_PORT:-5432}:5432"
     volumes:
       - docukore-postgres-data:/var/lib/postgresql
+      - ../../.env:/run/docukore/.env:ro
+      - ./postgres-env.sh:/usr/local/bin/docukore-postgres-env.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U docukore"]
+      test: ["CMD", "bash", "-c", "source /usr/local/bin/docukore-postgres-env.sh && docukore_read_environment /run/docukore/.env && pg_isready -U \"$$POSTGRES_USER\" -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    networks:
+      - docukore-network
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: ../infrastructure/docker/Dockerfile
+    command: ["--docukore.env.context=compose"]
+    env_file:
+      - path: ../../.env
+        format: raw
+    environment:
+      DOCUKORE_ENV_FILE: /app/config/.env
+      DOCUKORE_DEPLOYMENT_MODE: HOSTED
+      SPRING_PROFILES_ACTIVE: hosted
+    volumes:
+      - ../../.env:/app/config/.env:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DOCUKORE_BACKEND_PORT:-8080}:8080"
     networks:
       - docukore-network
 

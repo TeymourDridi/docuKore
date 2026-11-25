@@ -5,6 +5,17 @@ paths:
 
 # PostgreSQL and Flyway Engineering Standards
 
+## Installation Initialization
+
+- Use one private installation `.env` for all connections; never generate another credential file.
+- Complete Java bootstrap on maintenance `postgres` before Spring datasource/Flyway startup.
+- Preserve administrator, runtime, migrator/provisioner and test roles, existing data and migration histories.
+- Create absent roles with supplied passwords only; never rotate existing passwords during startup.
+- Ordinary startup never initializes `docukore_test`; test maintenance requires explicit `--docukore.initialize-test`.
+- Keep tenant provisioning and migration history separate from platform initialization.
+- HOSTED waits for PostgreSQL health; image initialization applies only to fresh volumes.
+- Preserve existing containers and volumes; no initializer containers or Testcontainers.
+
 ## 1. Database Naming
 
 - Use snake_case for schemas, tables, columns, indexes and constraints.

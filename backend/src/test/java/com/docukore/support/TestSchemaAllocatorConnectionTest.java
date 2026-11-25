@@ -206,10 +206,8 @@ class TestSchemaAllocatorConnectionTest
     void postgresSessionsSerializeThroughCommittedRegistrationAndReleaseAfterSuccessOrFailure(boolean failRegistration)
         throws Exception
     {
-        Assumptions.assumeTrue(configured("docukore.test.jdbc-url", "DOCUKORE_TEST_JDBC_URL")
-            && configured("docukore.test.username", "DOCUKORE_TEST_USERNAME")
-            && configured("docukore.test.password", "DOCUKORE_TEST_PASSWORD"),
-            "Dedicated PostgreSQL test configuration unavailable; no application database fallback");
+        Assumptions.assumeTrue(OwnedTestDatabase.hasExternalConfiguration(),
+            "Live PostgreSQL methods require an explicit test launch; mock-only methods need no database arguments");
 
         // Real PostgreSQL sessions/locks/commit/rollback only; allocation DDL and migrations remain intercepted.
         try (Connection first = OwnedTestDatabase.connection();
@@ -306,13 +304,6 @@ class TestSchemaAllocatorConnectionTest
                 executor.shutdownNow();
             }
         }
-    }
-
-    private static boolean configured(String property, String environment)
-    {
-        String value = System.getProperty(property);
-        return value != null && !value.isBlank()
-            || System.getenv(environment) != null && !System.getenv(environment).isBlank();
     }
 
     private static int backendPid(Connection connection) throws SQLException
@@ -441,6 +432,11 @@ class TestSchemaAllocatorConnectionTest
             when(database.next()).thenReturn(true);
             when(database.getString(1)).thenReturn("docukore_test");
             when(validation.executeQuery("SELECT current_database()")).thenReturn(database);
+            ResultSet roles = mock(ResultSet.class);
+            when(roles.next()).thenReturn(true);
+            when(roles.getString(1)).thenReturn("docukore_test_runner");
+            when(roles.getString(2)).thenReturn("docukore_test_runner");
+            when(validation.executeQuery("SELECT current_user, session_user")).thenReturn(roles);
             when(connection.createStatement()).thenReturn(validation);
             doAnswer(invocation ->
             {

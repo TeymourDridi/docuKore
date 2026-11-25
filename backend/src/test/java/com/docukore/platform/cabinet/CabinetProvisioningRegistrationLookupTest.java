@@ -1,5 +1,6 @@
 package com.docukore.platform.cabinet;
 
+import com.docukore.identity.DeploymentProperties;
 import com.docukore.platform.PlatformProperties;
 import com.docukore.platform.provisioning.CabinetProvisioningException;
 import com.docukore.platform.provisioning.CabinetProvisioningProperties;
@@ -212,7 +213,8 @@ class CabinetProvisioningRegistrationLookupTest
             "jdbc:postgresql://example.invalid/docukore_test", "fictional", "fictional", null, null, null, null);
         /** Real service under test. */
         private final CabinetProvisioningService service = new CabinetProvisioningService(
-            repository, properties, jdbc, new PlatformProperties("platform"));
+            repository, properties, jdbc, new PlatformProperties("platform"),
+            new DeploymentProperties(DeploymentProperties.Mode.HOSTED));
         /** Account stored on the registration row. */
         private UUID registrationAccount = ACCOUNT;
         /** Cabinet link returned by the JDBC boundary. */
@@ -294,6 +296,9 @@ class CabinetProvisioningRegistrationLookupTest
                     {
                         when(row.next()).thenReturn(false);
                     }
+                } else if (sql.contains("has_schema_privilege"))
+                {
+                    when(row.getBoolean(1)).thenReturn(true);
                 } else if (sql.contains("pg_catalog.pg_namespace"))
                 {
                     if (sql.startsWith("SELECT EXISTS"))
@@ -307,7 +312,7 @@ class CabinetProvisioningRegistrationLookupTest
                     }
                 } else if (sql.contains("flyway_schema_history_tenant WHERE success = true"))
                 {
-                    when(row.getInt(1)).thenReturn(1);
+                    when(row.getInt(1)).thenReturn(8);
                 } else if (sql.contains("cabinet_memberships WHERE cabinet_id") && sql.contains("status = 'ACTIVE'"))
                 {
                     when(row.getInt(1)).thenReturn(1);

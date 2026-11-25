@@ -1,15 +1,20 @@
 package com.docukore.tenant;
 
+import com.docukore.support.OwnedTestDatabase;
 import com.docukore.support.SharedSpringBootTest;
 import com.docukore.support.TestFixtures;
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.persistence.EntityManagerFactory;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestConstructor;
 
 import java.util.UUID;
@@ -24,10 +29,15 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 class ConcurrentHibernateTenantRoutingIntegrationTest extends SharedSpringBootTest
 {
 
+    /** Latest-migrated class-owned platform, never shared public metadata. */
+    private static final TestFixtures.OwnedPlatform PLATFORM = TestFixtures.createPlatform("concurrent_platform");
+    /** Migrator-only exact creation receipts for the concurrently used tenant schemas. */
+    private final OwnedTestDatabase.Scope resources;
     /** Creates tenant-scoped entity managers for concurrent routing tests. */
     private final EntityManagerFactory entityManagers;
     /** Connection pool used to verify concurrent tenant isolation. */
@@ -47,14 +57,21 @@ class ConcurrentHibernateTenantRoutingIntegrationTest extends SharedSpringBootTe
         this.entityManagers = entityManagers;
         this.dataSource = dataSource;
         this.filter = filter;
-        this.jdbc = new JdbcTemplate(dataSource);
+        this.jdbc = PLATFORM.jdbc();
+        this.resources = OwnedTestDatabase.scope(PLATFORM.migratorDataSource());
+    }
+
+    @DynamicPropertySource
+    static void isolatedPlatform(DynamicPropertyRegistry registry)
+    {
+        registerPlatform(registry, PLATFORM);
     }
 
     @BeforeEach
     void provisionTestSchemas()
     {
-        first = TestFixtures.createCabinetWithOwner(jdbc);
-        second = TestFixtures.createCabinetWithOwner(jdbc);
+        first = createFixture();
+        second = createFixture();
         TestFixtures.createTenantProbeTable(jdbc, first.schemaName());
         TestFixtures.createTenantProbeTable(jdbc, second.schemaName());
     }
@@ -83,9 +100,24 @@ class ConcurrentHibernateTenantRoutingIntegrationTest extends SharedSpringBootTe
         assertEquals("SECOND", jdbc.queryForObject(sql2, String.class, entityId));
         try (var firstConnection = dataSource.getConnection(); var secondConnection = dataSource.getConnection())
         {
-            assertEquals("public", firstConnection.getSchema());
-            assertEquals("public", secondConnection.getSchema());
+            assertEquals(PLATFORM.schema(), firstConnection.getSchema());
+            assertEquals(PLATFORM.schema(), secondConnection.getSchema());
         }
+    }
+
+    private TestFixtures.CabinetFixture createFixture()
+    {
+        UUID owner = TestFixtures.createUser(jdbc, PLATFORM.schema());
+        return TestFixtures.createCabinet(jdbc, PLATFORM.schema(), owner, resources);
+    }
+
+    @AfterAll
+    void removeOnlyOwnedFixtures()
+    {
+        // Workers have joined before class cleanup; retire routed sessions before namespace drops.
+        dataSource.close();
+        resources.close();
+        PLATFORM.close();
     }
 
     private Callable<Integer> write(UUID cabinet, UUID entityId, String marker, CyclicBarrier barrier)
