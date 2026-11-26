@@ -1,5 +1,3 @@
-@use './app/workspace-prototype/prototype-theme';
-
 * {
   box-sizing: border-box;
 }
@@ -36,6 +34,40 @@ h1 {
 h2 {
   margin: 0 0 0.8rem;
   font-size: 1.15rem;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 1.6rem;
+  font-weight: 750;
+  color: #123f42;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  border-radius: 0.7rem;
+  background: #087b77;
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 400;
+}
+.language {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #50696a;
+}
+.language select {
+  padding: 0.5rem;
+  background: #fff;
+  border: 1px solid #c1d4d2;
+  border-radius: 0.5rem;
+  color: #213f42;
+  font: inherit;
 }
 .auth-card {
   width: min(100%, 460px);
@@ -128,69 +160,8 @@ form small {
   font-size: 0.75rem;
   color: #5a7778;
 }
-app-workspace,
-app-workspace-prototype {
-  display: block;
-  width: 100%;
-  min-width: 0;
-}
-.workspace-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-.workspace-heading .intro {
-  margin: 0;
-}
-.account-panel,
-.next-panel {
-  padding: 1.6rem;
-  border: 1px solid #dce8e5;
-  border-radius: 1rem;
-  background: #fff;
-}
-.account-panel dl {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 0.8rem 1.5rem;
-  margin: 0;
-}
-.account-panel dt {
-  color: #577173;
-}
-.account-panel dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-weight: 550;
-}
-.next-panel {
-  margin-top: 1rem;
-  display: flex;
-  gap: 1.2rem;
-  background: #eef6f3;
-}
-.next-panel p {
-  margin: 0;
-  color: #526f70;
-  max-width: 65ch;
-}
-.brand-symbol {
-  color: #087b77;
-  font-size: 2.5rem;
-  line-height: 1;
-}
-@media (max-width: 600px) {
-  .workspace-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .account-panel dl {
-    grid-template-columns: 1fr;
-    gap: 0.3rem;
-  }
-  .account-panel dd {
-    margin-bottom: 0.8rem;
+@media (max-width: 480px) {
+  .language > span {
+    display: none;
   }
 }

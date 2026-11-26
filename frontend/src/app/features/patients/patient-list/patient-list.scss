@@ -1,0 +1,187 @@
+:host {
+  display: block;
+}
+
+.directory {
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid #dce8e5;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.directory-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+h1 {
+  margin-block: 0.35rem 0.6rem;
+}
+
+.intro {
+  max-width: 65ch;
+  margin-block: 0 1.5rem;
+  color: #546f71;
+}
+
+.search-field {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 40rem;
+  margin-block-end: 1.5rem;
+}
+
+.search-field label {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.search-control {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.search-control input {
+  min-width: 0;
+  flex: 1;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #b9cfcb;
+  border-radius: 0.6rem;
+  background: #fcfefd;
+  color: #213f42;
+}
+
+.clear-search {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #b8cecb;
+  border-radius: 0.6rem;
+  background: #fff;
+  color: #255154;
+  font-weight: 600;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #dce8e5;
+  border-radius: 0.65rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: start;
+}
+
+caption {
+  text-align: start;
+}
+
+th,
+td {
+  padding: 0.8rem 1rem;
+  border-block-end: 1px solid #e6efed;
+  text-align: start;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+th {
+  background: #f3f8f7;
+  color: #31595a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+tbody tr:last-child td {
+  border-block-end: 0;
+}
+
+.patient-number {
+  color: #255b5c;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.status,
+.empty-state {
+  margin: 0;
+  padding: 1.25rem 1rem;
+  border-radius: 0.65rem;
+  background: #f3f8f7;
+  color: #456568;
+}
+
+.error-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.65rem;
+  background: #fff1f0;
+  color: #8c2626;
+}
+
+.error-state p {
+  margin: 0;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-start: 1rem;
+}
+
+.page-summary {
+  color: #456568;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.secondary {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #b8cecb;
+  border-radius: 0.6rem;
+  background: #fff;
+  color: #255154;
+  font-weight: 600;
+}
+
+.secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 600px) {
+  .pagination,
+  .error-state {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-controls > button {
+    flex: 1;
+  }
+}

@@ -1,0 +1,114 @@
+<section class="directory" aria-labelledby="patient-directory-title">
+  <header class="directory-header">
+    <div>
+      <h1 id="patient-directory-title">{{ i18n.text('patients') }}</h1>
+      <p class="intro">{{ i18n.text('patientDirectoryIntro') }}</p>
+    </div>
+  </header>
+
+  <div class="search-field">
+    <label for="patient-search">{{ i18n.text('patientSearchLabel') }}</label>
+    <div class="search-control">
+      <input
+        id="patient-search"
+        type="search"
+        [value]="searchText()"
+        [placeholder]="i18n.text('patientSearchPlaceholder')"
+        [attr.aria-describedby]="'patient-search-help'"
+        (input)="updateSearch($event)"
+      />
+      @if (searchText()) {
+        <button
+          class="clear-search"
+          type="button"
+          [attr.aria-label]="i18n.text('patientClearSearch')"
+          (click)="clearSearch()"
+        >
+          {{ i18n.text('patientClearSearch') }}
+        </button>
+      }
+    </div>
+    <span id="patient-search-help" class="visually-hidden">{{
+      i18n.text('patientSearchHelp')
+    }}</span>
+  </div>
+
+  @if (loading()) {
+    <p class="status" role="status" aria-live="polite">{{ i18n.text('patientListLoading') }}</p>
+  } @else if (hasError()) {
+    <div class="error-state" role="alert">
+      <p>{{ i18n.text('patientListError') }}</p>
+      <button
+        class="secondary"
+        type="button"
+        [attr.aria-label]="i18n.text('patientRetryLabel')"
+        (click)="retry()"
+      >
+        {{ i18n.text('retry') }}
+      </button>
+    </div>
+  } @else if (patients().length > 0) {
+    <div class="table-scroll" tabindex="0" [attr.aria-label]="i18n.text('patientTableScrollLabel')">
+      <table>
+        <caption class="visually-hidden">
+          {{
+            i18n.text('patientTableCaption')
+          }}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ i18n.text('patientNumberLabel') }}</th>
+            <th scope="col">{{ i18n.text('patientFirstNameLabel') }}</th>
+            <th scope="col">{{ i18n.text('patientFamilyNameLabel') }}</th>
+            <th scope="col">{{ i18n.text('patientPhoneLabel') }}</th>
+            <th scope="col">{{ i18n.text('patientDateOfBirthLabel') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (patient of patients(); track patient.id) {
+            <tr>
+              <td class="patient-number">{{ patient.patientNumber }}</td>
+              <td>{{ patient.firstName }}</td>
+              <td>{{ patient.familyName }}</td>
+              <td>{{ patient.phone ?? i18n.text('patientFieldUnavailable') }}</td>
+              <td>{{ patient.dateOfBirth ?? i18n.text('patientFieldUnavailable') }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="empty-state" role="status" aria-live="polite">
+      {{ i18n.text(hasSearch() ? 'patientSearchEmpty' : 'patientDirectoryEmpty') }}
+    </p>
+  }
+
+  @if (!loading() && !hasError() && (patients().length > 0 || totalPages() > 1)) {
+    <nav class="pagination" [attr.aria-label]="i18n.text('patientPaginationLabel')">
+      <span class="page-summary">
+        {{ i18n.text('patientPageLabel') }} {{ page() + 1 }} {{ i18n.text('patientPageOf') }}
+        {{ totalPages() }}
+      </span>
+      <div class="page-controls">
+        <button
+          class="secondary"
+          type="button"
+          [disabled]="!canGoPrevious()"
+          [attr.aria-label]="i18n.text('patientPreviousPage')"
+          (click)="previousPage()"
+        >
+          {{ i18n.text('patientPreviousPage') }}
+        </button>
+        <button
+          class="secondary"
+          type="button"
+          [disabled]="!canGoNext()"
+          [attr.aria-label]="i18n.text('patientNextPage')"
+          (click)="nextPage()"
+        >
+          {{ i18n.text('patientNextPage') }}
+        </button>
+      </div>
+    </nav>
+  }
+</section>

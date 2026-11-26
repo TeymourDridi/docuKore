@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,12 +28,16 @@ public class PatientController
     /** Application service responsible for authorized persisted detail reads. */
     private final PatientDetailService detail;
 
+    /** Application service responsible for authorized partial updates. */
+    private final PatientUpdateService update;
+
     public PatientController(PatientCreationService creation, PatientListingService listing,
-                             PatientDetailService detail)
+                             PatientDetailService detail, PatientUpdateService update)
     {
         this.creation = creation;
         this.listing = listing;
         this.detail = detail;
+        this.update = update;
     }
 
     @GetMapping
@@ -49,6 +54,14 @@ public class PatientController
     {
         return ResponseEntity.ok().header("Cache-Control", "no-store")
             .body(detail.get(patientId));
+    }
+
+    @PatchMapping("/{patientId}")
+    ResponseEntity<PatientDetailResponse> update(@PathVariable UUID patientId,
+                                                @RequestBody UpdatePatientRequest request)
+    {
+        return ResponseEntity.ok().header("Cache-Control", "no-store")
+            .body(update.update(patientId, request));
     }
 
     @PostMapping

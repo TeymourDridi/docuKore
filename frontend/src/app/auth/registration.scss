@@ -137,6 +137,7 @@ fieldset {
 }
 
 .optional {
+  margin-left: auto;
   color: #5b7475;
   font-size: 0.73rem;
   font-weight: 400;
@@ -177,6 +178,8 @@ fieldset {
 }
 
 .registration-field .field-error {
+  margin-top: 5px;
+  font-size: 11px;
   color: #8c2626;
   font-weight: 500;
 }

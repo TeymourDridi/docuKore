@@ -118,13 +118,22 @@ class RuntimeDatabasePrivilegesIntegrationTest extends SharedPostgresTest
         String schema = tenant("7");
         jdbc.execute("GRANT UPDATE, DELETE, TRUNCATE ON " + table(schema, "audit_logs") + " TO docukore_app");
         tenantFlyway(schema, "latest").migrate();
-        assertEquals(8L, jdbc.queryForObject("SELECT max(version::integer) FROM "
+        assertEquals(10L, jdbc.queryForObject("SELECT max(version::integer) FROM "
             + table(schema, "flyway_schema_history_tenant") + " WHERE success", Long.class));
         try (Connection runtime = OwnedTestDatabase.runtimeConnection())
         {
             assertTableMatrix(runtime, schema, Map.of(
                 "patients", READ_INSERT_UPDATE,
+                "patient_contacts", List.of("SELECT", "INSERT"),
                 "audit_logs", List.of("SELECT", "INSERT")));
+            String contacts = table(schema, "patient_contacts");
+            List<String> columns = jdbc.queryForList("SELECT column_name FROM information_schema.columns"
+                + " WHERE table_schema = ? AND table_name = 'patient_contacts'", String.class, schema);
+            for (String column : columns)
+            {
+                assertEquals("is_current".equals(column), queryBoolean(runtime,
+                    "SELECT pg_catalog.has_column_privilege(current_user, ?, ?, 'UPDATE')", contacts, column), column);
+            }
             assertSchemaPrivileges(runtime, schema);
             runtime.setAutoCommit(false);
             try
@@ -137,6 +146,18 @@ class RuntimeDatabasePrivilegesIntegrationTest extends SharedPostgresTest
                     + " (id, cabinet_id, patient_number, legal_given_name, legal_family_name, created_at, updated_at)"
                     + " VALUES (?, ?, 'GRANT-PROBE', 'Fictional', 'GrantProbe', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                     patient, cabinet));
+                UUID contact = UUID.randomUUID();
+                assertEquals(1, update(runtime, "INSERT INTO " + contacts
+                    + " (id, patient_id, contact_type, value, value_normalized, is_current, created_at)"
+                    + " VALUES (?, ?, 'PHONE', 'Fictional original phone', '+21620999888', true, CURRENT_TIMESTAMP)",
+                    contact, patient));
+                assertEquals(1, update(runtime, "UPDATE " + contacts
+                    + " SET is_current = false WHERE id = ?", contact));
+                assertEquals(1L, queryLong(runtime, "SELECT count(*) FROM " + contacts
+                    + " WHERE id = ? AND is_current = false AND value_normalized = '+21620999888'", contact));
+                deny(runtime, "UPDATE " + contacts + " SET value = 'Fictional forbidden overwrite' WHERE false");
+                deny(runtime, "UPDATE " + contacts + " SET value_normalized = '+21620999777' WHERE false");
+                deny(runtime, "DELETE FROM " + contacts + " WHERE false");
                 assertEquals(1, update(runtime, "UPDATE " + table(schema, "patients")
                     + " SET archived_at = CURRENT_TIMESTAMP WHERE id = ?", patient));
                 assertEquals(1L, queryLong(runtime, "SELECT count(*) FROM " + table(schema, "patients")

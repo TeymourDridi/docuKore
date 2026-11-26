@@ -78,7 +78,7 @@ public class PatientCreationService
             throw new CabinetSelectionRequired();
         }
         String phone = normalizePhone(request.phone());
-        LocalDate birth = parseBirthDate(request.dateOfBirth());
+        LocalDate birth = parseBirthDate(request.dateOfBirth(), clock);
         try
         {
             return cabinetAccess.executeWrite(cabinets.getFirst(), () -> writes.execute(status ->
@@ -139,7 +139,7 @@ public class PatientCreationService
             saved.getLegalFamilyName(), phone, birth, saved.getInitialNote(), saved.getCreatedAt());
     }
 
-    private static String normalizePhone(String raw)
+    static String normalizePhone(String raw)
     {
         if (raw == null || !raw.matches("\\+?[0-9 ().-]+"))
         {
@@ -167,7 +167,7 @@ public class PatientCreationService
         return normalized;
     }
 
-    private LocalDate parseBirthDate(String raw)
+    static LocalDate parseBirthDate(String raw, Clock clock)
     {
         if (raw == null)
         {

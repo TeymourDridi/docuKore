@@ -1,18 +1,27 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { finalize } from 'rxjs';
-import { AuthService } from './auth.service';
-import { authError } from './auth-errors';
-import { LanguageService } from '../i18n/language.service';
-import { TranslationKey } from '../i18n/translations';
+import { AuthService } from '../../auth/auth.service';
+import { authError } from '../../auth/auth-errors';
+import { LanguageService } from '../../i18n/language.service';
+import { TranslationKey } from '../../i18n/translations';
 
-@Component({ selector: 'app-workspace', templateUrl: './workspace.html' })
-export class Workspace {
+@Component({
+  selector: 'app-workspace-shell',
+  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  templateUrl: './workspace-shell.html',
+  styleUrl: './workspace-shell.scss',
+})
+export class WorkspaceShell {
   protected readonly i18n = inject(LanguageService);
-  protected readonly auth = inject(AuthService);
+  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly accountName = computed(
+    () =>
+      this.auth.account()?.fullName || this.auth.account()?.username || this.i18n.text('account')
+  );
   protected readonly busy = signal(false);
   protected readonly error = signal<TranslationKey | null>(null);
 

@@ -1,0 +1,41 @@
+<a class="skip-link" href="#workspace-content">{{ i18n.text('skipToContent') }}</a>
+<div class="workspace-layout">
+  <aside class="workspace-sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">+</span><span>Docukore</span>
+    </div>
+    <nav [attr.aria-label]="i18n.text('workspaceNavigation')">
+      <a routerLink="/workspace/patients" routerLinkActive="active" ariaCurrentWhenActive="page">
+        {{ i18n.text('patients') }}
+      </a>
+    </nav>
+  </aside>
+  <div class="workspace-body">
+    <header class="workspace-header">
+      <div class="account">
+        <span class="account-label">{{ i18n.text('account') }}</span>
+        <strong>{{ accountName() }}</strong>
+      </div>
+      <label class="language">
+        <span>{{ i18n.text('language') }}</span>
+        <select
+          #language
+          [attr.aria-label]="i18n.text('language')"
+          [value]="i18n.language()"
+          (change)="i18n.select(language.value)"
+        >
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+          <option value="ar">العربية</option>
+        </select>
+      </label>
+      <button class="secondary logout" type="button" [disabled]="busy()" (click)="logout()">
+        {{ i18n.text(busy() ? 'signingOut' : 'logout') }}
+      </button>
+    </header>
+    @if (error(); as message) {
+      <p class="error logout-error" role="alert">{{ i18n.text(message) }}</p>
+    }
+    <main id="workspace-content" tabindex="-1"><router-outlet /></main>
+  </div>
+</div>

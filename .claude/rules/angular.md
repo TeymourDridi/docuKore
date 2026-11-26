@@ -12,11 +12,21 @@ paths:
 
 - Use standalone components for new development.
 - Organize code by business feature.
-- Use lazy loading for feature routes.
-- Keep clear separation between presentation, application logic and data access.
+- Keep App focused on the root router outlet; place shells in `layout/public-shell` and `layout/workspace-shell`, and the patient list in `features/patients/patient-list`.
+- Use lazy-loaded feature routes defined separately from components.
+- Keep clear separation between presentation, application logic and data access; colocate API logic with its business feature.
+- Do not introduce generic `pages`, `components`, `services` or `data-access` directories, or premature `shared` abstractions.
 - Avoid unnecessary NgModules in new architecture.
 - Avoid premature abstractions and excessive component fragmentation.
 - Keep the application architecture consistent.
+
+### Naming — Task 9.5.5.1 agreement
+
+- For new Angular 22 components, use suffixless kebab-case filenames and matching PascalCase classes: `patient-list.ts` → `PatientList`, `workspace-shell.ts` → `WorkspaceShell`.
+- Do not add `.component.ts` or `Component` suffixes. Keep one main concept per file and prefer descriptive names over `utils`, `helpers` or `common`.
+- Keep component TypeScript, HTML, SCSS and unit-test files on the same basename: `patient-list.ts`, `patient-list.html`, `patient-list.scss`, `patient-list.spec.ts`. Unit tests use `.spec.ts`.
+- Use purposeful names for other feature files: `patient-api.ts` → `PatientApi`, `patient.model.ts`, `patients.routes.ts` → `PATIENTS_ROUTES`.
+- Do not rename legacy auth files or classes as part of this convention update.
 
 ## 2. Dependency Injection
 
@@ -28,15 +38,18 @@ paths:
 
 Example:
 
+```typescript
 @Component({
   selector: 'app-patient-list',
-  templateUrl: './patient-list.component.html'
+  templateUrl: './patient-list.html',
+  styleUrl: './patient-list.scss'
 })
-export class PatientListComponent {
+export class PatientList {
 
-  private readonly patientService = inject(PatientService);
+  private readonly patientApi = inject(PatientApi);
 
 }
+```
 
 Follow the official Angular style guide.
 
@@ -75,17 +88,15 @@ Use Angular's built-in template control flow for new development where appropria
 
 ## 6. Forms
 
-- Use typed forms.
-- Use Reactive Forms as the initial default for complex data-entry workflows.
-- Evaluate Signal Forms when finalizing the Angular version.
-- Select and document a consistent form strategy.
+- Use typed Reactive Forms as the project default for data-entry workflows.
+- Do not introduce Signal Forms or another form framework as part of this milestone.
 - Keep validation understandable and reusable where appropriate.
 - Validate important data on both frontend and backend.
 - Never treat frontend validation as a security boundary.
 
 ## 7. HTTP and API Communication
 
-- Centralize HTTP communication in feature-level data-access services.
+- Centralize HTTP communication in dedicated feature API classes such as `PatientApi`, colocated with their feature.
 - Do not place business API calls directly in presentation components.
 - Use typed request and response models.
 - Use functional HTTP interceptors.

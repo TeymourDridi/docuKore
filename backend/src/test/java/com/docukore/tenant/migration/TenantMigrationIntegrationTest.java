@@ -65,11 +65,11 @@ class TenantMigrationIntegrationTest extends PostgresMigrationTest
     }
 
     @Test
-    void freshSchemasHaveSeventeenTablesAndIndependentNineVersionHistories()
+    void freshSchemasHaveSeventeenTablesAndIndependentTenVersionHistories()
     {
         String first = tenant("latest");
         String second = tenant("latest");
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9"), history(first));
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"), history(first));
         assertEquals(history(first), history(second));
         assertEquals(17, jdbc.queryForObject(
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = ? "
@@ -314,7 +314,7 @@ class TenantMigrationIntegrationTest extends PostgresMigrationTest
         contact(schema, id, "PHONE", PHONE, true);
         assertEquals(List.of("1", "2", "3", "4", "5", "6"), history(schema));
         tenantFlyway(schema, "latest").migrate();
-        assertEquals(9, history(schema).size());
+        assertEquals(10, history(schema).size());
         assertEquals(1, jdbc.queryForObject(
             "SELECT count(*) FROM " + schema + ".patients WHERE id = ?",
             Integer.class, id));
@@ -332,7 +332,7 @@ class TenantMigrationIntegrationTest extends PostgresMigrationTest
         List<String> originalHistory = history(schema);
         tenantFlyway(schema, "latest").migrate();
         assertEquals(originalHistory, history(schema).subList(0, 8));
-        assertEquals("9", history(schema).getLast());
+        assertEquals("10", history(schema).getLast());
         assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM " + schema + ".patients", Integer.class));
         assertEquals("PAT-000042", jdbc.queryForObject(
             "SELECT patient_number FROM " + schema + ".patients WHERE id = ?", String.class, id));
@@ -344,6 +344,30 @@ class TenantMigrationIntegrationTest extends PostgresMigrationTest
             "SELECT nextval('" + schema + ".patient_number_seq')", Long.class));
         assertEquals(0, jdbc.queryForObject(
             "SELECT count(*) FROM " + schema + ".patient_contacts", Integer.class));
+    }
+
+    @Test
+    void patientPhoneUpdateUpgradePreservesExistingPatientsContactsAndAppliedHistory()
+    {
+        String schema = tenant("9");
+        UUID id = patient(schema, "PATCH-LEGACY", 1988, 2, null, "YEAR_MONTH");
+        contact(schema, id, "PHONE", PHONE, true);
+        contact(schema, id, "MOBILE", "+21620999888", false);
+        contact(schema, id, "EMAIL", null, true);
+        jdbc.update("UPDATE " + schema + ".patients SET initial_note = ? WHERE id = ?",
+            "  Fictional persisted legacy note.  ", id);
+        var patients = jdbc.queryForList("SELECT * FROM " + schema + ".patients ORDER BY id");
+        var contacts = jdbc.queryForList("SELECT * FROM " + schema + ".patient_contacts ORDER BY id");
+        var applied = jdbc.queryForList("SELECT * FROM " + schema
+            + ".flyway_schema_history_tenant ORDER BY installed_rank");
+
+        assertEquals(1, tenantFlyway(schema, "latest").migrate().migrationsExecuted);
+
+        assertEquals(patients, jdbc.queryForList("SELECT * FROM " + schema + ".patients ORDER BY id"));
+        assertEquals(contacts, jdbc.queryForList("SELECT * FROM " + schema + ".patient_contacts ORDER BY id"));
+        assertEquals(applied, jdbc.queryForList("SELECT * FROM " + schema
+            + ".flyway_schema_history_tenant WHERE version::integer <= 9 ORDER BY installed_rank"));
+        assertEquals("10", history(schema).getLast());
     }
 
     @ParameterizedTest

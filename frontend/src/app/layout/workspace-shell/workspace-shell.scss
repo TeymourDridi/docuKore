@@ -1,0 +1,98 @@
+:host {
+  display: block;
+}
+
+.workspace-layout {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  min-height: 100dvh;
+  background: #f4f8f7;
+}
+
+.workspace-sidebar {
+  padding: 1.5rem;
+  background: #fff;
+  border-inline-end: 1px solid #dce8e7;
+}
+
+nav {
+  margin-block-start: 2rem;
+
+  a {
+    display: block;
+    padding: 0.75rem 1rem;
+    border-radius: 0.6rem;
+    color: #255154;
+    text-decoration: none;
+
+    &:hover,
+    &.active {
+      background: #e5f3ef;
+      color: #066660;
+    }
+  }
+}
+
+.workspace-body {
+  min-width: 0;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem clamp(1rem, 3vw, 2rem);
+  background: #fff;
+  border-bottom: 1px solid #dce8e7;
+}
+
+.account {
+  display: grid;
+  gap: 0.2rem;
+  margin-inline-end: auto;
+  overflow-wrap: anywhere;
+}
+
+.account-label {
+  font-size: 0.8rem;
+  color: #50696a;
+}
+
+main {
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.logout-error {
+  margin: 1rem clamp(1rem, 3vw, 2rem) 0;
+}
+
+.skip-link {
+  position: absolute;
+  inset-block-start: 0.5rem;
+  inset-inline-start: 1rem;
+  transform: translateY(-200%);
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #066660;
+
+  &:focus {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-sidebar {
+    border-inline-end: 0;
+    border-bottom: 1px solid #dce8e7;
+  }
+
+  nav {
+    margin-block-start: 1rem;
+  }
+}
